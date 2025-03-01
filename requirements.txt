@@ -1,0 +1,7 @@
+streamlit
+joblib
+tensorflow
+plotly
+pandas
+requests
+openai
