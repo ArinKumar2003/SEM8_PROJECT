@@ -7,30 +7,32 @@ import tensorflow as tf
 from tensorflow.keras.models import load_model
 import os
 
+# **Set Page Configuration (Must be the first Streamlit command)**
+st.set_page_config(page_title="🌍 Climate Dashboard", layout="wide")
+
 # **Load Models with Error Handling**
+gb_model, lstm_model = None, None
+
 try:
     gb_model = joblib.load("climate_gb_model.pkl")  # Gradient Boosting
+except ModuleNotFoundError:
+    st.error("🚨 Scikit-learn is missing! Install it using `pip install scikit-learn`.")
 except Exception as e:
     st.error(f"🚨 Error loading Gradient Boosting model: {e}")
-    gb_model = None
 
 try:
     lstm_model = load_model("climate_lstm_model.keras")  # LSTM
 except Exception as e:
     st.error(f"🚨 Error loading LSTM model: {e}")
-    lstm_model = None
 
-# **Set up Streamlit UI**
-st.set_page_config(page_title="🌍 Climate Dashboard", layout="wide")
-
-# **Sidebar for File Upload**
+# **Sidebar: File Upload**
 st.sidebar.header("📂 Upload Climate Data")
 uploaded_file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
 
-# **Sidebar Model Selection**
+# **Sidebar: Model Selection**
 model_choice = st.sidebar.radio("🤖 Choose Prediction Model", ["Gradient Boosting", "LSTM"])
 
-# **Sidebar Filters**
+# **Sidebar: Filters**
 st.sidebar.subheader("📅 Filter Data")
 selected_year = st.sidebar.slider("Select Year", 1900, 2100, 2020)
 
