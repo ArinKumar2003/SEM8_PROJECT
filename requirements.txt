@@ -6,3 +6,4 @@ pandas
 requests
 openai
 scikit-learn
+seaborn
