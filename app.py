@@ -47,9 +47,6 @@ gb_model, lstm_model = load_models()
 st.sidebar.header("📂 Upload Climate Data")
 uploaded_file = st.sidebar.file_uploader("Upload CSV File", type=["csv"])
 
-# Sidebar: Model Selection
-model_choice = st.sidebar.radio("🤖 Choose Prediction Model", ["Gradient Boosting", "LSTM", "Prophet"])
-
 # Sidebar: Live Weather Data
 st.sidebar.markdown("### 🌦 Live Weather Data")
 city = st.sidebar.text_input("Enter City", value="New York")
@@ -64,9 +61,8 @@ if st.sidebar.button("Get Live Weather"):
     else:
         st.sidebar.error("❌ Unable to fetch weather data.")
 
-# Sidebar: Filter Data
-st.sidebar.subheader("📅 Filter Data")
-selected_year = st.sidebar.slider("Select Year", 1900, 2100, 2020)
+# Sidebar: Model Selection
+model_choice = st.sidebar.radio("🤖 Choose Prediction Model", ["Gradient Boosting", "LSTM", "Prophet"])
 
 # Sidebar: Manual Prediction Input
 st.sidebar.markdown("### 🔢 Manual Input for Prediction")
@@ -86,15 +82,15 @@ manual_input = pd.DataFrame({
     "SeaLevel": [sealevel_input]
 })
 
-# Sidebar: Help Section
-st.sidebar.markdown("### ℹ️ How to Use:")
-st.sidebar.info("Upload a CSV file with `Years`, `Month`, `Day`, `CO2`, `Humidity`, and `SeaLevel` columns. Select a model to predict temperature.")
-
 # ---- MAIN CONTENT ----
+st.markdown("<h1 style='text-align: center; color: #4CAF50;'>🌍 Climate Change Prediction Dashboard</h1>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center;'>📊 Analyze trends, visualize data, and predict future climate conditions.</h3>", unsafe_allow_html=True)
+st.markdown("---")
+
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
-    # ---- TABS FOR NAVIGATION ----
+    # ---- TABS ----
     tab1, tab2, tab3, tab4 = st.tabs(["📊 Data Overview", "📈 Visualizations", "🔮 Predictions", "🛠️ Manual Prediction"])
 
     # 📊 ---- DATA OVERVIEW ----
@@ -108,8 +104,6 @@ if uploaded_file:
     with tab2:
         st.write("### 📊 Climate Trends Over Time")
         feature = st.selectbox("Select Feature", ["Temperature", "CO2", "Humidity", "SeaLevel"])
-        df_filtered = df[df["Years"] == selected_year]
-
         fig = px.line(df, x="Years", y=feature, title=f"{feature} Trends Over Time", markers=True)
         st.plotly_chart(fig, use_container_width=True)
 
@@ -140,8 +134,10 @@ if uploaded_file:
                 st.plotly_chart(fig_forecast, use_container_width=True)
 
             df["Predicted Temperature"] = predictions
+            df["Weather Description"] = np.where(df["Predicted Temperature"] > 30, "☀️ Hot", "🌥 Mild" if df["Predicted Temperature"] > 15 else "❄️ Cold")
+
             st.write("### 🔥 Predictions")
-            st.dataframe(df[["Years", "Predicted Temperature"]])
+            st.dataframe(df[["Years", "Predicted Temperature", "Weather Description"]])
 
             fig_pred = px.line(df, x="Years", y="Predicted Temperature", title="Predicted Temperature Trends")
             st.plotly_chart(fig_pred, use_container_width=True)
@@ -161,8 +157,11 @@ if uploaded_file:
         else:
             manual_prediction = None
 
+        weather_desc = "☀️ Hot" if manual_prediction > 30 else "🌥 Mild" if manual_prediction > 15 else "❄️ Cold"
+
         if manual_prediction is not None:
             st.metric(label="🌡️ Predicted Temperature (°C)", value=f"{manual_prediction:.2f}")
+            st.success(f"🌦 Expected Weather: {weather_desc}")
         else:
             st.warning("⚠️ Prophet does not support manual input predictions.")
 
