@@ -28,6 +28,19 @@ def load_models():
 
 gb_model, lstm_model = load_models()
 
+# ---- FUNCTION TO GENERATE WEATHER DESCRIPTIONS ----
+def get_weather_description(temp):
+    if temp > 30:
+        return "🔥 Scorching hot, stay hydrated!"
+    elif 20 <= temp <= 30:
+        return "☀️ Pleasantly warm, enjoy your day!"
+    elif 10 <= temp < 20:
+        return "🌥 Mild weather, light jacket recommended."
+    elif 0 <= temp < 10:
+        return "🌧 Cool and breezy, wear warm clothing!"
+    else:
+        return "❄️ Freezing conditions, stay warm!"
+
 # ---- SIDEBAR ----
 st.sidebar.header("📂 Upload Climate Data")
 uploaded_file = st.sidebar.file_uploader("Upload CSV File", type=["csv"])
@@ -113,26 +126,19 @@ if uploaded_file:
 
             # Prophet Model
             elif model_choice == "Prophet":
-                st.write("### 📈 Prophet Forecasting")
                 df_prophet = df.rename(columns={"Years": "ds", "Temperature": "y"})
                 prophet_model = Prophet()
                 prophet_model.fit(df_prophet)
                 future = prophet_model.make_future_dataframe(periods=365)
                 forecast = prophet_model.predict(future)
-                
-                # Prophet Forecast Visualization
-                fig_forecast = px.line(forecast, x="ds", y="yhat", title="Prophet Forecasted Temperature")
-                st.plotly_chart(fig_forecast, use_container_width=True)
                 predictions = forecast["yhat"]
 
-            # Store predictions in DataFrame
             df["Predicted Temperature"] = predictions
+            df["Weather Description"] = df["Predicted Temperature"].apply(get_weather_description)
 
-            # Show Predictions
-            st.write("### 🔥 Predictions")
-            st.dataframe(df[["Years", "Predicted Temperature"]])
+            st.write("### 🔥 Predictions with Weather Insights")
+            st.dataframe(df[["Years", "Predicted Temperature", "Weather Description"]])
 
-            # 📉 Prediction Visualization
             fig_pred = px.line(df, x="Years", y="Predicted Temperature", title="Predicted Temperature Trends")
             st.plotly_chart(fig_pred, use_container_width=True)
 
@@ -149,14 +155,15 @@ if uploaded_file:
             manual_input_lstm = np.array(manual_input).reshape((1, manual_input.shape[1], 1))
             manual_prediction = lstm_model.predict(manual_input_lstm).flatten()[0]
         else:
-            manual_prediction = None  # Prophet does not support manual input predictions
+            manual_prediction = None
 
         if manual_prediction is not None:
-            st.metric(label="🌡️ Predicted Temperature (°C)", value=f"{manual_prediction:.2f}")
+            weather_desc = get_weather_description(manual_prediction)
+            st.metric(label="🌡️ Predicted Temperature (°C)", value=f"{manual_prediction:.2f}", help=weather_desc)
+            st.markdown(f"### {weather_desc}")
         else:
             st.warning("⚠️ Prophet does not support manual input predictions.")
 
-    # 📥 ---- DOWNLOAD PREDICTIONS ----
     df.to_csv("predictions.csv", index=False)
     st.sidebar.download_button("📥 Download Predictions", data=df.to_csv().encode("utf-8"),
                                file_name="predictions.csv", mime="text/csv")
