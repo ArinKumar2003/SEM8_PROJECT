@@ -17,7 +17,7 @@ st.markdown("<h3 style='text-align: center;'>📊 Analyze trends, visualize data
 st.markdown("---")
 
 # ---- LOAD API KEY FROM SECRETS ----
-API_KEY = st.secrets["WEATHERSTACK_API_KEY"]
+API_KEY = st.secrets["fd6db116aab81dbc975b89c502692ac0"]
 
 # ---- LOAD MODELS ----
 @st.cache_resource
@@ -35,7 +35,7 @@ gb_model, lstm_model = load_models()
 # ---- LIVE WEATHER FUNCTION ----
 def get_live_weather(city):
     """Fetches real-time weather data from Weatherstack API."""
-    url = f"http://api.weatherstack.com/current?access_key={API_KEY}&query={city}"
+    url = f"http://api.weatherstack.com/current?access_key=fd6db116aab81dbc975b89c502692ac0&query=New York"
     response = requests.get(url)
     
     if response.status_code == 200:
