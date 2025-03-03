@@ -20,7 +20,7 @@ st.markdown("---")
 # ---- WEATHERSTACK API CONFIG ----
 @st.cache_resource
 def get_weather_data(city="New York"):
-    API_KEY = st.secrets["fd6db116aab81dbc975b89c502692ac0"]  # Ensure this is set in `.streamlit/secrets.toml`
+    API_KEY = "fd6db116aab81dbc975b89c502692ac0"  # Ensure this is set in `.streamlit/secrets.toml`
     url = f"http://api.weatherstack.com/current?access_key=fd6db116aab81dbc975b89c502692ac0&query=New York"
     
     try:
