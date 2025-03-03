@@ -11,8 +11,9 @@ from prophet import Prophet
 st.set_page_config(page_title="🌍 Climate Change Dashboard", layout="wide")
 
 # ---- DASHBOARD HEADER ----
-st.title("🌍 Climate Change Prediction Dashboard")
-st.markdown("##### 📈 Analyze climate trends, visualize changes, and predict future conditions.")
+st.markdown("<h1 style='text-align: center; color: #4CAF50;'>🌍 Climate Change Prediction Dashboard</h1>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center;'>📊 Analyze trends, visualize data, and predict future climate conditions.</h3>", unsafe_allow_html=True)
+st.markdown("---")
 
 # ---- CACHING MODEL LOAD ----
 @st.cache_resource
@@ -38,15 +39,34 @@ model_choice = st.sidebar.radio("🤖 Choose Prediction Model", ["Gradient Boost
 st.sidebar.subheader("📅 Filter Data")
 selected_year = st.sidebar.slider("Select Year", 1900, 2100, 2020)
 
+# Sidebar: Manual Prediction Input
+st.sidebar.markdown("### 🔢 Manual Input for Prediction")
+year_input = st.sidebar.slider("Year", 1900, 2100, 2025)
+month_input = st.sidebar.slider("Month", 1, 12, 6)
+day_input = st.sidebar.slider("Day", 1, 31, 15)
+co2_input = st.sidebar.number_input("CO2 Level (ppm)", min_value=200, max_value=600, value=400)
+humidity_input = st.sidebar.number_input("Humidity (%)", min_value=0, max_value=100, value=50)
+sealevel_input = st.sidebar.number_input("Sea Level Rise (mm)", min_value=0, max_value=500, value=100)
+
+manual_input = pd.DataFrame({
+    "Years": [year_input],
+    "Month": [month_input],
+    "Day": [day_input],
+    "CO2": [co2_input],
+    "Humidity": [humidity_input],
+    "SeaLevel": [sealevel_input]
+})
+
 # Sidebar: Help Section
 st.sidebar.markdown("### ℹ️ How to Use:")
-st.sidebar.info("Upload a CSV file with `Years`, `Month`, `Day`, `CO2`, `Humidity`, and `SeaLevel` columns. Select a model to get temperature predictions.")
+st.sidebar.info("Upload a CSV file with `Years`, `Month`, `Day`, `CO2`, `Humidity`, and `SeaLevel` columns. Select a model to predict temperature.")
 
+# ---- MAIN CONTENT ----
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
     # ---- TABS FOR NAVIGATION ----
-    tab1, tab2, tab3 = st.tabs(["📊 Data Overview", "📈 Visualizations", "🔮 Predictions"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Data Overview", "📈 Visualizations", "🔮 Predictions", "🛠️ Manual Prediction"])
 
     # 📊 ---- DATA OVERVIEW ----
     with tab1:
@@ -118,6 +138,20 @@ if uploaded_file:
 
         else:
             st.warning("🚨 The dataset is missing required columns!")
+
+    # 🛠️ ---- MANUAL PREDICTION ----
+    with tab4:
+        st.write("### 🎛️ Predict Temperature from Manual Inputs")
+
+        if model_choice == "Gradient Boosting":
+            manual_prediction = gb_model.predict(manual_input)[0]
+        elif model_choice == "LSTM":
+            manual_input_lstm = np.array(manual_input).reshape((1, manual_input.shape[1], 1))
+            manual_prediction = lstm_model.predict(manual_input_lstm).flatten()[0]
+        else:
+            manual_prediction = "N/A"
+
+        st.metric(label="🌡️ Predicted Temperature (°C)", value=f"{manual_prediction:.2f}")
 
     # 📥 ---- DOWNLOAD PREDICTIONS ----
     df.to_csv("predictions.csv", index=False)
