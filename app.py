@@ -3,21 +3,32 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import joblib
+import requests
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 from prophet import Prophet
-import requests
 
 # ---- STREAMLIT PAGE CONFIG ----
 st.set_page_config(page_title="🌍 Climate Change Dashboard", layout="wide")
 
-# ---- DASHBOARD HEADER ----
-st.markdown("<h1 style='text-align: center; color: #4CAF50;'>🌍 Climate Change Prediction Dashboard</h1>", unsafe_allow_html=True)
-st.markdown("<h3 style='text-align: center;'>📊 Analyze trends, visualize data, and predict future climate conditions.</h3>", unsafe_allow_html=True)
-st.markdown("---")
+# ---- WEATHERSTACK API CONFIG ----
+API_KEY = st.secrets["WEATHERSTACK_API_KEY"]  # Ensure it's set in secrets.toml
 
-# ---- LOAD API KEY FROM SECRETS ----
-API_KEY = st.secrets["fd6db116aab81dbc975b89c502692ac0"]
+def get_live_weather(city):
+    """Fetches real-time weather data from Weatherstack API."""
+    url = f"http://api.weatherstack.com/current?access_key={API_KEY}&query={city}"
+    response = requests.get(url)
+    data = response.json()
+
+    if "current" in data:
+        return {
+            "temperature": data["current"]["temperature"],
+            "description": data["current"]["weather_descriptions"][0],
+            "humidity": data["current"]["humidity"],
+            "wind_speed": data["current"]["wind_speed"]
+        }
+    else:
+        return None
 
 # ---- LOAD MODELS ----
 @st.cache_resource
@@ -32,23 +43,6 @@ def load_models():
 
 gb_model, lstm_model = load_models()
 
-# ---- LIVE WEATHER FUNCTION ----
-def get_live_weather(city):
-    """Fetches real-time weather data from Weatherstack API."""
-    url = f"http://api.weatherstack.com/current?access_key=fd6db116aab81dbc975b89c502692ac0&query=New York"
-    response = requests.get(url)
-    
-    if response.status_code == 200:
-        data = response.json()
-        if "current" in data:
-            return {
-                "temperature": data["current"]["temperature"],
-                "weather_desc": data["current"]["weather_descriptions"][0],
-                "humidity": data["current"]["humidity"],
-                "wind_speed": data["current"]["wind_speed"]
-            }
-    return None
-
 # ---- SIDEBAR ----
 st.sidebar.header("📂 Upload Climate Data")
 uploaded_file = st.sidebar.file_uploader("Upload CSV File", type=["csv"])
@@ -56,8 +50,23 @@ uploaded_file = st.sidebar.file_uploader("Upload CSV File", type=["csv"])
 # Sidebar: Model Selection
 model_choice = st.sidebar.radio("🤖 Choose Prediction Model", ["Gradient Boosting", "LSTM", "Prophet"])
 
-# Sidebar: City for Live Weather
-city = st.sidebar.text_input("🌍 Enter City for Live Weather", "New York")
+# Sidebar: Live Weather Data
+st.sidebar.markdown("### 🌦 Live Weather Data")
+city = st.sidebar.text_input("Enter City", value="New York")
+
+if st.sidebar.button("Get Live Weather"):
+    weather_data = get_live_weather(city)
+    if weather_data:
+        st.sidebar.success(f"🌡 Temperature: {weather_data['temperature']}°C")
+        st.sidebar.info(f"☁️ {weather_data['description']}")
+        st.sidebar.text(f"💧 Humidity: {weather_data['humidity']}%")
+        st.sidebar.text(f"🌬 Wind Speed: {weather_data['wind_speed']} km/h")
+    else:
+        st.sidebar.error("❌ Unable to fetch weather data.")
+
+# Sidebar: Filter Data
+st.sidebar.subheader("📅 Filter Data")
+selected_year = st.sidebar.slider("Select Year", 1900, 2100, 2020)
 
 # Sidebar: Manual Prediction Input
 st.sidebar.markdown("### 🔢 Manual Input for Prediction")
@@ -77,34 +86,41 @@ manual_input = pd.DataFrame({
     "SeaLevel": [sealevel_input]
 })
 
+# Sidebar: Help Section
+st.sidebar.markdown("### ℹ️ How to Use:")
+st.sidebar.info("Upload a CSV file with `Years`, `Month`, `Day`, `CO2`, `Humidity`, and `SeaLevel` columns. Select a model to predict temperature.")
+
 # ---- MAIN CONTENT ----
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
     # ---- TABS FOR NAVIGATION ----
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Data Overview", "📈 Visualizations", "🔮 Predictions", "🌍 Live Weather"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Data Overview", "📈 Visualizations", "🔮 Predictions", "🛠️ Manual Prediction"])
 
     # 📊 ---- DATA OVERVIEW ----
     with tab1:
         st.write("### 📄 Uploaded Data")
         st.dataframe(df)
-
         st.write("### 📊 Data Summary")
         st.write(df.describe())
 
     # 📈 ---- VISUALIZATION ----
     with tab2:
         st.write("### 📊 Climate Trends Over Time")
-
         feature = st.selectbox("Select Feature", ["Temperature", "CO2", "Humidity", "SeaLevel"])
+        df_filtered = df[df["Years"] == selected_year]
+
         fig = px.line(df, x="Years", y=feature, title=f"{feature} Trends Over Time", markers=True)
         st.plotly_chart(fig, use_container_width=True)
+
+        fig_hist = px.histogram(df, x=feature, nbins=20, title=f"Distribution of {feature}")
+        st.plotly_chart(fig_hist, use_container_width=True)
 
     # 🔮 ---- PREDICTIONS ----
     with tab3:
         st.write("### 🔮 Predict Future Climate Conditions")
-
         required_features = ["Years", "Month", "Day", "CO2", "Humidity", "SeaLevel"]
+
         if all(col in df.columns for col in required_features):
             X_new = df[required_features]
 
@@ -120,12 +136,12 @@ if uploaded_file:
                 future = prophet_model.make_future_dataframe(periods=365)
                 forecast = prophet_model.predict(future)
                 predictions = forecast["yhat"]
+                fig_forecast = px.line(forecast, x="ds", y="yhat", title="Prophet Forecasted Temperature")
+                st.plotly_chart(fig_forecast, use_container_width=True)
 
             df["Predicted Temperature"] = predictions
-            df["Weather Description"] = df["Predicted Temperature"].apply(lambda x: "Very Hot 🔥" if x > 35 else "Warm ☀️" if x > 20 else "Cool 🌬️" if x > 10 else "Cold ❄️")
-
-            st.write("### 🔥 Predictions with Weather Description")
-            st.dataframe(df[["Years", "Predicted Temperature", "Weather Description"]])
+            st.write("### 🔥 Predictions")
+            st.dataframe(df[["Years", "Predicted Temperature"]])
 
             fig_pred = px.line(df, x="Years", y="Predicted Temperature", title="Predicted Temperature Trends")
             st.plotly_chart(fig_pred, use_container_width=True)
@@ -133,20 +149,23 @@ if uploaded_file:
         else:
             st.warning("🚨 The dataset is missing required columns!")
 
-    # 🌍 ---- LIVE WEATHER ----
+    # 🛠️ ---- MANUAL PREDICTION ----
     with tab4:
-        st.write(f"### 🌍 Live Weather in {city}")
+        st.write("### 🎛️ Predict Temperature from Manual Inputs")
 
-        weather_data = get_live_weather(city)
-        if weather_data:
-            st.metric(label="🌡️ Current Temperature (°C)", value=f"{weather_data['temperature']}°C")
-            st.metric(label="💨 Wind Speed", value=f"{weather_data['wind_speed']} km/h")
-            st.metric(label="💧 Humidity", value=f"{weather_data['humidity']}%")
-            st.write(f"**Weather Description:** {weather_data['weather_desc']}")
+        if model_choice == "Gradient Boosting":
+            manual_prediction = gb_model.predict(manual_input)[0]
+        elif model_choice == "LSTM":
+            manual_input_lstm = np.array(manual_input).reshape((1, manual_input.shape[1], 1))
+            manual_prediction = lstm_model.predict(manual_input_lstm).flatten()[0]
         else:
-            st.error("⚠️ Could not fetch weather data. Check API Key or city name!")
+            manual_prediction = None
 
-    # 📥 ---- DOWNLOAD PREDICTIONS ----
+        if manual_prediction is not None:
+            st.metric(label="🌡️ Predicted Temperature (°C)", value=f"{manual_prediction:.2f}")
+        else:
+            st.warning("⚠️ Prophet does not support manual input predictions.")
+
     df.to_csv("predictions.csv", index=False)
     st.sidebar.download_button("📥 Download Predictions", data=df.to_csv().encode("utf-8"),
                                file_name="predictions.csv", mime="text/csv")
