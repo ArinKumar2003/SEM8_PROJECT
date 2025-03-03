@@ -11,12 +11,12 @@ from prophet import Prophet
 # ---- STREAMLIT PAGE CONFIG ----
 st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
 
-# ---- CUSTOM STYLING ----
+# ---- STYLING ----
 st.markdown("""
     <style>
-    .main-title { text-align: center; color: #2c3e50; font-size: 48px; font-weight: bold; margin-bottom: 10px; }
-    .sub-title { text-align: center; color: #7f8c8d; font-size: 22px; margin-bottom: 30px; }
-    .weather-card { background: #ecf0f1; padding: 15px; border-radius: 12px; text-align: center; margin-top: 20px; }
+    .main-title { text-align: center; color: #2c3e50; font-size: 48px; font-weight: bold; }
+    .sub-title { text-align: center; color: #7f8c8d; font-size: 22px; margin-bottom: 20px; }
+    .weather-card { background: #ecf0f1; padding: 15px; border-radius: 12px; text-align: center; }
     .hot { background: linear-gradient(to right, #ff416c, #ff4b2b); color: white; }
     .mild { background: linear-gradient(to right, #6dd5ed, #2193b0); color: white; }
     .cold { background: linear-gradient(to right, #3498db, #2c3e50); color: white; }
@@ -47,28 +47,11 @@ def get_live_weather(city):
     else:
         return None
 
-# ---- LOAD MODELS ----
-@st.cache_resource
-def load_models():
-    try:
-        gb_model = joblib.load("climate_gb_model.pkl")
-        lstm_model = load_model("climate_lstm_model.keras")
-        return gb_model, lstm_model
-    except Exception as e:
-        st.error(f"🚨 Error loading models: {e}")
-        return None, None
-
-gb_model, lstm_model = load_models()
-
-# ---- SIDEBAR ----
-st.sidebar.header("📂 Upload Climate Data")
-uploaded_file = st.sidebar.file_uploader("Upload CSV File", type=["csv"])
-
 # ---- LIVE WEATHER DISPLAY ----
-st.sidebar.markdown("### 🌦 Live Weather Data")
-city = st.sidebar.text_input("Enter City", value="New York")
+st.subheader("🌦 Live Weather Data")
+city = st.text_input("Enter City", value="New York")
 
-if st.sidebar.button("🔍 Get Live Weather"):
+if st.button("🔍 Get Live Weather"):
     weather_data = get_live_weather(city)
     
     if weather_data:
@@ -89,7 +72,24 @@ if st.sidebar.button("🔍 Get Live Weather"):
         </div>
         """, unsafe_allow_html=True)
     else:
-        st.sidebar.error("❌ Unable to fetch weather data.")
+        st.error("❌ Unable to fetch weather data.")
+
+# ---- LOAD MODELS ----
+@st.cache_resource
+def load_models():
+    try:
+        gb_model = joblib.load("climate_gb_model.pkl")
+        lstm_model = load_model("climate_lstm_model.keras")
+        return gb_model, lstm_model
+    except Exception as e:
+        st.error(f"🚨 Error loading models: {e}")
+        return None, None
+
+gb_model, lstm_model = load_models()
+
+# ---- SIDEBAR ----
+st.sidebar.header("📂 Upload Climate Data")
+uploaded_file = st.sidebar.file_uploader("Upload CSV File", type=["csv"])
 
 # ---- MODEL SELECTION ----
 model_choice = st.sidebar.radio("🤖 Choose Prediction Model", ["Gradient Boosting", "LSTM", "Prophet"])
