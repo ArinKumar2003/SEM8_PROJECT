@@ -34,7 +34,7 @@ def get_live_weather(city):
 # ---- MAIN PAGE CONTENT ----
 st.subheader("🌦 Live Weather Conditions")
 
-# Input for city on the main page instead of sidebar
+# Input for city on the main page
 city = st.text_input("Enter City", value="New York")
 if st.button("🔍 Get Live Weather"):
     weather_data = get_live_weather(city)
@@ -62,9 +62,16 @@ else:
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
+# ---- SIDEBAR ----
+with st.sidebar:
+    st.header("📂 Upload Climate Data")
+    uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
+    
+    st.subheader("🤖 Choose Prediction Model")
+    model_choice = st.radio("", ["Gradient Boosting", "LSTM", "Prophet"])
+
 # ---- CLIMATE DATA PREDICTIONS ----
 st.subheader("📈 Future Climate Predictions")
-uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
     st.write(df.head())  # Display first few rows
