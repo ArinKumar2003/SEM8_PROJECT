@@ -143,15 +143,22 @@ if uploaded_file:
     with tab4:
         st.write("### 🎛️ Predict Temperature from Manual Inputs")
 
-        if model_choice == "Gradient Boosting":
-            manual_prediction = gb_model.predict(manual_input)[0]
-        elif model_choice == "LSTM":
-            manual_input_lstm = np.array(manual_input).reshape((1, manual_input.shape[1], 1))
-            manual_prediction = lstm_model.predict(manual_input_lstm).flatten()[0]
-        else:
-            manual_prediction = "N/A"
+        try:
+            if model_choice == "Gradient Boosting":
+                manual_prediction = gb_model.predict(manual_input)[0]
+            elif model_choice == "LSTM":
+                manual_input_lstm = np.array(manual_input).reshape((1, manual_input.shape[1], 1))
+                manual_prediction = lstm_model.predict(manual_input_lstm).flatten()[0]
+            else:
+                manual_prediction = None  # Prophet model does not support single-point prediction
 
-        st.metric(label="🌡️ Predicted Temperature (°C)", value=f"{manual_prediction:.2f}")
+            if manual_prediction is not None:
+                st.metric(label="🌡️ Predicted Temperature (°C)", value=f"{manual_prediction:.2f}")
+            else:
+                st.warning("⚠️ Prophet model does not support manual input predictions.")
+
+        except Exception as e:
+            st.error(f"🚨 Error in manual prediction: {e}")
 
     # 📥 ---- DOWNLOAD PREDICTIONS ----
     df.to_csv("predictions.csv", index=False)
