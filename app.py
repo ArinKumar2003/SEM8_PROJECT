@@ -11,6 +11,23 @@ from prophet import Prophet
 # ---- STREAMLIT PAGE CONFIG ----
 st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
 
+# ---- CUSTOM STYLING ----
+st.markdown("""
+    <style>
+    .main-title { text-align: center; color: #2c3e50; font-size: 48px; font-weight: bold; margin-bottom: 10px; }
+    .sub-title { text-align: center; color: #7f8c8d; font-size: 22px; margin-bottom: 30px; }
+    .weather-card { background: #ecf0f1; padding: 15px; border-radius: 12px; text-align: center; margin-top: 20px; }
+    .hot { background: linear-gradient(to right, #ff416c, #ff4b2b); color: white; }
+    .mild { background: linear-gradient(to right, #6dd5ed, #2193b0); color: white; }
+    .cold { background: linear-gradient(to right, #3498db, #2c3e50); color: white; }
+    </style>
+""", unsafe_allow_html=True)
+
+# ---- DASHBOARD HEADER ----
+st.markdown("<h1 class='main-title'>🌍 AI Climate Change Prediction Dashboard</h1>", unsafe_allow_html=True)
+st.markdown("<h3 class='sub-title'>📊 Analyze global climate trends, visualize insights, and predict future conditions with AI.</h3>", unsafe_allow_html=True)
+st.markdown("---")
+
 # ---- WEATHERSTACK API CONFIG ----
 API_KEY = st.secrets["WEATHERSTACK_API_KEY"]
 
@@ -42,22 +59,6 @@ def load_models():
         return None, None
 
 gb_model, lstm_model = load_models()
-
-# ---- DASHBOARD HEADER ----
-st.markdown("""
-    <style>
-    .main-title { text-align: center; color: #2c3e50; font-size: 40px; font-weight: bold; }
-    .sub-title { text-align: center; color: #7f8c8d; font-size: 22px; }
-    .weather-card { background: #ecf0f1; padding: 15px; border-radius: 12px; text-align: center; }
-    .hot { background: linear-gradient(to right, #ff416c, #ff4b2b); color: white; }
-    .mild { background: linear-gradient(to right, #6dd5ed, #2193b0); color: white; }
-    .cold { background: linear-gradient(to right, #3498db, #2c3e50); color: white; }
-    </style>
-""", unsafe_allow_html=True)
-
-st.markdown("<h1 class='main-title'>🌍 AI Climate Change Prediction Dashboard</h1>", unsafe_allow_html=True)
-st.markdown("<h3 class='sub-title'>📊 Analyze global climate trends, visualize insights, and predict future conditions with AI.</h3>", unsafe_allow_html=True)
-st.markdown("---")
 
 # ---- SIDEBAR ----
 st.sidebar.header("📂 Upload Climate Data")
