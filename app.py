@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -7,16 +6,24 @@ import joblib
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 
-# Load ML Models
+# ✅ Move `st.set_page_config()` to the very top
+st.set_page_config(page_title="🌍 Climate Dashboard", layout="wide")
+
+# Load ML Models with error handling
+gb_model = None
+lstm_model = None
+
 try:
     gb_model = joblib.load("climate_gb_model.pkl")  # Gradient Boosting Model
-    lstm_model = load_model("climate_lstm_model.keras")  # LSTM Model
-    st.success("✅ Models Loaded Successfully!")
-except Exception as e:
-    st.error(f"🚨 Error loading models: {e}")
+    st.success("✅ Gradient Boosting Model Loaded Successfully!")
+except FileNotFoundError:
+    st.warning("🚨 Gradient Boosting Model file is missing!")
 
-# Streamlit Page Config
-st.set_page_config(page_title="🌍 Climate Dashboard", layout="wide")
+try:
+    lstm_model = load_model("climate_lstm_model.keras")  # LSTM Model
+    st.success("✅ LSTM Model Loaded Successfully!")
+except (FileNotFoundError, OSError):
+    st.warning("🚨 LSTM Model file is missing or corrupted!")
 
 # Sidebar for Upload & Filters
 st.sidebar.header("📂 Upload Climate Data")
@@ -31,10 +38,10 @@ selected_year = st.sidebar.slider("Select Year", 1900, 2100, 2020)
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-    
+
     # **TABS for Navigation**
     tab1, tab2, tab3 = st.tabs(["📊 Data Overview", "📈 Visualizations", "🔮 Predictions"])
-    
+
     # **📊 Data Overview Tab**
     with tab1:
         st.write("### 📄 Uploaded Data")
@@ -49,7 +56,7 @@ if uploaded_file:
 
         # Select Feature to Visualize
         feature = st.selectbox("Select Feature", ["Temperature", "CO2", "Humidity", "SeaLevel"])
-        
+
         # Filter Data
         df_filtered = df[df["Years"] == selected_year]
 
@@ -69,24 +76,29 @@ if uploaded_file:
         if all(col in df.columns for col in required_features):
             X_new = df[required_features]
 
-            # Make Predictions
+            # Make Predictions (only if the selected model is loaded)
             if model_choice == "Gradient Boosting":
-                predictions = gb_model.predict(X_new)
+                if gb_model:
+                    predictions = gb_model.predict(X_new)
+                    df["Predicted Temperature"] = predictions
+                else:
+                    st.error("🚨 Gradient Boosting Model is missing! Upload the model file.")
             else:
-                X_new_lstm = np.array(X_new).reshape((X_new.shape[0], X_new.shape[1], 1))
-                predictions = lstm_model.predict(X_new_lstm).flatten()
+                if lstm_model:
+                    X_new_lstm = np.array(X_new).reshape((X_new.shape[0], X_new.shape[1], 1))
+                    predictions = lstm_model.predict(X_new_lstm).flatten()
+                    df["Predicted Temperature"] = predictions
+                else:
+                    st.error("🚨 LSTM Model is missing! Upload the model file.")
 
-            # Add predictions to dataframe
-            df["Predicted Temperature"] = predictions
+            # Show Predictions (only if predictions exist)
+            if "Predicted Temperature" in df.columns:
+                st.write("### 🔥 Predictions")
+                st.dataframe(df[["Years", "Predicted Temperature"]])
 
-            # Show Predictions
-            st.write("### 🔥 Predictions")
-            st.dataframe(df[["Years", "Predicted Temperature"]])
-
-            # **📉 Prediction Visualization**
-            fig_pred = px.line(df, x="Years", y="Predicted Temperature", title="Predicted Temperature Trends")
-            st.plotly_chart(fig_pred, use_container_width=True)
-
+                # **📉 Prediction Visualization**
+                fig_pred = px.line(df, x="Years", y="Predicted Temperature", title="Predicted Temperature Trends")
+                st.plotly_chart(fig_pred, use_container_width=True)
         else:
             st.warning("🚨 The dataset is missing required columns!")
 
