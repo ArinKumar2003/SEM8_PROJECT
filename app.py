@@ -30,16 +30,18 @@ gb_model, lstm_model = load_models()
 
 # ---- FUNCTION TO GENERATE WEATHER DESCRIPTIONS ----
 def get_weather_description(temp):
-    if temp > 30:
-        return "🔥 Scorching hot, stay hydrated!"
-    elif 20 <= temp <= 30:
-        return "☀️ Pleasantly warm, enjoy your day!"
+    if temp > 35:
+        return "🔥 Extreme Heat! Stay Indoors!", "red"
+    elif 30 <= temp <= 35:
+        return "☀️ Very Hot, Stay Hydrated!", "orange"
+    elif 20 <= temp < 30:
+        return "🌤 Pleasant Weather!", "green"
     elif 10 <= temp < 20:
-        return "🌥 Mild weather, light jacket recommended."
+        return "🌥 Mild & Cloudy!", "blue"
     elif 0 <= temp < 10:
-        return "🌧 Cool and breezy, wear warm clothing!"
+        return "🌧 Cold & Rainy!", "purple"
     else:
-        return "❄️ Freezing conditions, stay warm!"
+        return "❄️ Freezing! Bundle Up!", "darkblue"
 
 # ---- SIDEBAR ----
 st.sidebar.header("📂 Upload Climate Data")
@@ -93,17 +95,13 @@ if uploaded_file:
     with tab2:
         st.write("### 📊 Climate Trends Over Time")
 
-        # Select Feature to Visualize
         feature = st.selectbox("Select Feature", ["Temperature", "CO2", "Humidity", "SeaLevel"])
         
-        # Filter Data
         df_filtered = df[df["Years"] == selected_year]
 
-        # Interactive Line Chart
         fig = px.line(df, x="Years", y=feature, title=f"{feature} Trends Over Time", markers=True)
         st.plotly_chart(fig, use_container_width=True)
 
-        # Histogram of Selected Feature
         fig_hist = px.histogram(df, x=feature, nbins=20, title=f"Distribution of {feature}")
         st.plotly_chart(fig_hist, use_container_width=True)
 
@@ -115,16 +113,11 @@ if uploaded_file:
         if all(col in df.columns for col in required_features):
             X_new = df[required_features]
 
-            # Gradient Boosting Model
             if model_choice == "Gradient Boosting":
                 predictions = gb_model.predict(X_new)
-
-            # LSTM Model
             elif model_choice == "LSTM":
                 X_new_lstm = np.array(X_new).reshape((X_new.shape[0], X_new.shape[1], 1))
                 predictions = lstm_model.predict(X_new_lstm).flatten()
-
-            # Prophet Model
             elif model_choice == "Prophet":
                 df_prophet = df.rename(columns={"Years": "ds", "Temperature": "y"})
                 prophet_model = Prophet()
@@ -134,12 +127,12 @@ if uploaded_file:
                 predictions = forecast["yhat"]
 
             df["Predicted Temperature"] = predictions
-            df["Weather Description"] = df["Predicted Temperature"].apply(get_weather_description)
+            df["Weather Description"], df["Color"] = zip(*df["Predicted Temperature"].apply(get_weather_description))
 
             st.write("### 🔥 Predictions with Weather Insights")
             st.dataframe(df[["Years", "Predicted Temperature", "Weather Description"]])
 
-            fig_pred = px.line(df, x="Years", y="Predicted Temperature", title="Predicted Temperature Trends")
+            fig_pred = px.line(df, x="Years", y="Predicted Temperature", title="Predicted Temperature Trends", color_discrete_sequence=["red"])
             st.plotly_chart(fig_pred, use_container_width=True)
 
         else:
@@ -158,9 +151,9 @@ if uploaded_file:
             manual_prediction = None
 
         if manual_prediction is not None:
-            weather_desc = get_weather_description(manual_prediction)
-            st.metric(label="🌡️ Predicted Temperature (°C)", value=f"{manual_prediction:.2f}", help=weather_desc)
-            st.markdown(f"### {weather_desc}")
+            weather_desc, color = get_weather_description(manual_prediction)
+            st.markdown(f"<h2 style='color:{color}; text-align:center;'>🌡️ Predicted Temperature: {manual_prediction:.2f}°C</h2>", unsafe_allow_html=True)
+            st.markdown(f"<h3 style='color:{color}; text-align:center;'>{weather_desc}</h3>", unsafe_allow_html=True)
         else:
             st.warning("⚠️ Prophet does not support manual input predictions.")
 
