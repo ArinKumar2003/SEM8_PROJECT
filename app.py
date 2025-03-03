@@ -6,9 +6,11 @@ import pandas as pd
 st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
 
 # ---- DASHBOARD HEADER ----
-st.markdown("<h1 style='text-align: center; color: #2c3e50;'>🌍 AI Climate Change Prediction Dashboard</h1>", unsafe_allow_html=True)
-st.markdown("<h3 style='text-align: center; color: #7f8c8d;'>📊 Live Weather & Future Climate Predictions</h3>", unsafe_allow_html=True)
-st.markdown("---")
+st.markdown("""
+    <h1 style='text-align: center; color: #2c3e50; font-size: 36px;'>🌍 AI Climate Change Prediction Dashboard</h1>
+    <h3 style='text-align: center; color: #7f8c8d;'>📊 Live Weather & Future Climate Predictions</h3>
+    <hr style="border:1px solid #ddd;">
+""", unsafe_allow_html=True)
 
 # ---- WEATHERSTACK API CONFIG ----
 API_KEY = st.secrets["WEATHERSTACK_API_KEY"]
@@ -42,8 +44,8 @@ with st.sidebar:
     if st.button("🔍 Get Live Weather"):
         st.session_state.weather_city = city  # Save city in session
 
-# ---- LIVE WEATHER DISPLAY ----
-st.subheader("🌦 Current Weather Conditions")
+# ---- MAIN PAGE CONTENT ----
+st.subheader("🌦 Live Weather Conditions")
 city = st.session_state.get("weather_city", "New York")
 weather_data = get_live_weather(city)
 
@@ -53,13 +55,14 @@ if weather_data:
     humidity = weather_data["humidity"]
     wind_speed = weather_data["wind_speed"]
 
+    # Use columns for better layout
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown(f"""
         <div style="text-align: center; background: #ecf0f1; padding: 20px; border-radius: 12px;">
             <h2>🌆 {city}</h2>
-            <h1>🌡 {temp}°C</h1>
+            <h1 style="color:#e74c3c;">🌡 {temp}°C</h1>
             <h3>☁️ {desc}</h3>
         </div>
         """, unsafe_allow_html=True)
@@ -74,7 +77,7 @@ if weather_data:
 else:
     st.error("❌ Unable to fetch weather data. Check city name or API key.")
 
-st.markdown("---")
+st.markdown("<hr>", unsafe_allow_html=True)
 
 # ---- CLIMATE DATA PREDICTIONS ----
 st.subheader("📈 Future Climate Predictions")
@@ -85,5 +88,4 @@ if uploaded_file:
 else:
     st.info("📂 Upload a CSV file to generate predictions.")
 
-st.markdown("---")
 st.markdown("<h4 style='text-align: center;'>🔍 AI-Driven Climate Insights for a Sustainable Future</h4>", unsafe_allow_html=True)
