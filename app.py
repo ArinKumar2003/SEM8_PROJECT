@@ -39,23 +39,24 @@ model_choice = st.sidebar.radio("🤖 Choose Prediction Model", ["Gradient Boost
 st.sidebar.subheader("📅 Filter Data")
 selected_year = st.sidebar.slider("Select Year", 1900, 2100, 2020)
 
-# Sidebar: Manual Prediction Input
-st.sidebar.markdown("### 🔢 Manual Input for Prediction")
-year_input = st.sidebar.slider("Year", 1900, 2100, 2025)
-month_input = st.sidebar.slider("Month", 1, 12, 6)
-day_input = st.sidebar.slider("Day", 1, 31, 15)
-co2_input = st.sidebar.number_input("CO2 Level (ppm)", min_value=200, max_value=600, value=400)
-humidity_input = st.sidebar.number_input("Humidity (%)", min_value=0, max_value=100, value=50)
-sealevel_input = st.sidebar.number_input("Sea Level Rise (mm)", min_value=0, max_value=500, value=100)
+# Sidebar: Manual Prediction Input (only for GB & LSTM)
+if model_choice != "Prophet":
+    st.sidebar.markdown("### 🔢 Manual Input for Prediction")
+    year_input = st.sidebar.slider("Year", 1900, 2100, 2025)
+    month_input = st.sidebar.slider("Month", 1, 12, 6)
+    day_input = st.sidebar.slider("Day", 1, 31, 15)
+    co2_input = st.sidebar.number_input("CO2 Level (ppm)", min_value=200, max_value=600, value=400)
+    humidity_input = st.sidebar.number_input("Humidity (%)", min_value=0, max_value=100, value=50)
+    sealevel_input = st.sidebar.number_input("Sea Level Rise (mm)", min_value=0, max_value=500, value=100)
 
-manual_input = pd.DataFrame({
-    "Years": [year_input],
-    "Month": [month_input],
-    "Day": [day_input],
-    "CO2": [co2_input],
-    "Humidity": [humidity_input],
-    "SeaLevel": [sealevel_input]
-})
+    manual_input = pd.DataFrame({
+        "Years": [year_input],
+        "Month": [month_input],
+        "Day": [day_input],
+        "CO2": [co2_input],
+        "Humidity": [humidity_input],
+        "SeaLevel": [sealevel_input]
+    })
 
 # Sidebar: Help Section
 st.sidebar.markdown("### ℹ️ How to Use:")
@@ -102,16 +103,15 @@ if uploaded_file:
         if all(col in df.columns for col in required_features):
             X_new = df[required_features]
 
-            # Gradient Boosting Model
+            predictions = None  # Default value
+
             if model_choice == "Gradient Boosting":
                 predictions = gb_model.predict(X_new)
 
-            # LSTM Model
             elif model_choice == "LSTM":
                 X_new_lstm = np.array(X_new).reshape((X_new.shape[0], X_new.shape[1], 1))
                 predictions = lstm_model.predict(X_new_lstm).flatten()
 
-            # Prophet Model
             elif model_choice == "Prophet":
                 st.write("### 📈 Prophet Forecasting")
                 df_prophet = df.rename(columns={"Years": "ds", "Temperature": "y"})
@@ -125,16 +125,14 @@ if uploaded_file:
                 fig_forecast = px.line(forecast, x="ds", y="yhat", title="Prophet Forecasted Temperature")
                 st.plotly_chart(fig_forecast, use_container_width=True)
 
-            # Store predictions in DataFrame
-            df["Predicted Temperature"] = predictions
+            if predictions is not None and model_choice != "Prophet":
+                df["Predicted Temperature"] = predictions
+                st.write("### 🔥 Predictions")
+                st.dataframe(df[["Years", "Predicted Temperature"]])
 
-            # Show Predictions
-            st.write("### 🔥 Predictions")
-            st.dataframe(df[["Years", "Predicted Temperature"]])
-
-            # 📉 Prediction Visualization
-            fig_pred = px.line(df, x="Years", y="Predicted Temperature", title="Predicted Temperature Trends")
-            st.plotly_chart(fig_pred, use_container_width=True)
+                # 📉 Prediction Visualization
+                fig_pred = px.line(df, x="Years", y="Predicted Temperature", title="Predicted Temperature Trends")
+                st.plotly_chart(fig_pred, use_container_width=True)
 
         else:
             st.warning("🚨 The dataset is missing required columns!")
@@ -143,22 +141,25 @@ if uploaded_file:
     with tab4:
         st.write("### 🎛️ Predict Temperature from Manual Inputs")
 
-        try:
-            if model_choice == "Gradient Boosting":
-                manual_prediction = gb_model.predict(manual_input)[0]
-            elif model_choice == "LSTM":
-                manual_input_lstm = np.array(manual_input).reshape((1, manual_input.shape[1], 1))
-                manual_prediction = lstm_model.predict(manual_input_lstm).flatten()[0]
-            else:
-                manual_prediction = None  # Prophet model does not support single-point prediction
+        if model_choice == "Prophet":
+            st.warning("⚠️ Prophet model does not support manual input predictions. Please use Gradient Boosting or LSTM.")
+        else:
+            try:
+                manual_prediction = None
 
-            if manual_prediction is not None:
-                st.metric(label="🌡️ Predicted Temperature (°C)", value=f"{manual_prediction:.2f}")
-            else:
-                st.warning("⚠️ Prophet model does not support manual input predictions.")
+                if model_choice == "Gradient Boosting":
+                    manual_prediction = gb_model.predict(manual_input)[0]
+                elif model_choice == "LSTM":
+                    manual_input_lstm = np.array(manual_input).reshape((1, manual_input.shape[1], 1))
+                    manual_prediction = lstm_model.predict(manual_input_lstm).flatten()[0]
 
-        except Exception as e:
-            st.error(f"🚨 Error in manual prediction: {e}")
+                if isinstance(manual_prediction, (int, float)):
+                    st.metric(label="🌡️ Predicted Temperature (°C)", value=f"{manual_prediction:.2f}")
+                else:
+                    st.warning("⚠️ No valid prediction was generated.")
+
+            except Exception as e:
+                st.error(f"🚨 Error in manual prediction: {e}")
 
     # 📥 ---- DOWNLOAD PREDICTIONS ----
     df.to_csv("predictions.csv", index=False)
