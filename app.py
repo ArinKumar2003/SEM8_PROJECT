@@ -31,61 +31,43 @@ def get_live_weather(city):
     else:
         return None
 
-# ---- SIDEBAR ----
-with st.sidebar:
-    st.header("📂 Upload Climate Data")
-    uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
-    
-    st.subheader("🤖 Choose Prediction Model")
-    model_choice = st.radio("", ["Gradient Boosting", "LSTM", "Prophet"])
-
-    st.subheader("🌦 Live Weather Data")
-    city = st.text_input("Enter City", value="New York")
-    if st.button("🔍 Get Live Weather"):
-        st.session_state.weather_city = city  # Save city in session
-
 # ---- MAIN PAGE CONTENT ----
 st.subheader("🌦 Live Weather Conditions")
-city = st.session_state.get("weather_city", "New York")
-weather_data = get_live_weather(city)
 
-if weather_data:
-    temp = weather_data["temperature"]
-    desc = weather_data["description"]
-    humidity = weather_data["humidity"]
-    wind_speed = weather_data["wind_speed"]
+# Input for city on the main page instead of sidebar
+city = st.text_input("Enter City", value="New York")
+if st.button("🔍 Get Live Weather"):
+    weather_data = get_live_weather(city)
 
-    # Use columns for better layout
-    col1, col2 = st.columns(2)
-    
-    with col1:
+    if weather_data:
+        temp = weather_data["temperature"]
+        desc = weather_data["description"]
+        humidity = weather_data["humidity"]
+        wind_speed = weather_data["wind_speed"]
+
+        # Display live weather details in a visually appealing layout
         st.markdown(f"""
         <div style="text-align: center; background: #ecf0f1; padding: 20px; border-radius: 12px;">
             <h2>🌆 {city}</h2>
             <h1 style="color:#e74c3c;">🌡 {temp}°C</h1>
             <h3>☁️ {desc}</h3>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col2:
-        st.markdown(f"""
-        <div style="text-align: center; background: #ecf0f1; padding: 20px; border-radius: 12px;">
             <p>💧 Humidity: <b>{humidity}%</b></p>
             <p>🌬 Wind Speed: <b>{wind_speed} km/h</b></p>
         </div>
         """, unsafe_allow_html=True)
+    else:
+        st.error("❌ Unable to fetch weather data. Check city name or API key.")
 else:
-    st.error("❌ Unable to fetch weather data. Check city name or API key.")
+    st.info("Enter a city name and click 'Get Live Weather' to see the conditions.")
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
 # ---- CLIMATE DATA PREDICTIONS ----
 st.subheader("📈 Future Climate Predictions")
+uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
     st.write(df.head())  # Display first few rows
     st.success("✅ Data uploaded successfully! Choose a model to proceed.")
 else:
     st.info("📂 Upload a CSV file to generate predictions.")
-
-st.markdown("<h4 style='text-align: center;'>🔍 AI-Driven Climate Insights for a Sustainable Future</h4>", unsafe_allow_html=True)
