@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 import plotly.express as px
 import numpy as np
-from fbprophet import Prophet
+from prophet import Prophet
 
 # ---- STREAMLIT CONFIG ----
 st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
