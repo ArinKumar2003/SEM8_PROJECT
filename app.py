@@ -3,14 +3,13 @@ import requests
 import pandas as pd
 import plotly.express as px
 import numpy as np
-import datetime
+from fbprophet import Prophet
 
 # ---- STREAMLIT CONFIG ----
 st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
 
 # ---- THEME TOGGLE (DARK/LIGHT MODE) ----
 theme = st.sidebar.radio("🌗 Theme", ["Light Mode", "Dark Mode"])
-
 if theme == "Dark Mode":
     st.markdown(
         """
@@ -26,7 +25,7 @@ if theme == "Dark Mode":
 st.markdown(
     """
     <h1 style='text-align: center; color: #2c3e50;'>🌍 AI Climate Change Prediction Dashboard</h1>
-    <h3 style='text-align: center; color: #7f8c8d;'>📊 Live Weather, Predictions & Interactive Analysis</h3>
+    <h3 style='text-align: center; color: #7f8c8d;'>📊 Live Weather, AI Predictions & Interactive Analysis</h3>
     <hr>
     """,
     unsafe_allow_html=True
@@ -40,10 +39,9 @@ except KeyError:
     API_KEY = None
 
 def get_live_weather(city):
-    """Fetches real-time weather data from Weatherstack API."""
+    """Fetch real-time weather data from Weatherstack API."""
     if not API_KEY:
         return None
-
     url = f"http://api.weatherstack.com/current?access_key={API_KEY}&query={city}"
     response = requests.get(url)
     data = response.json()
@@ -57,11 +55,10 @@ def get_live_weather(city):
             "feels_like": data["current"]["feelslike"],
             "pressure": data["current"]["pressure"],
         }
-    else:
-        return None
+    return None
 
 # ---- TABS FOR NAVIGATION ----
-tab1, tab2, tab3, tab4 = st.tabs(["🌦 Live Weather", "📈 Climate Predictions", "🔮 Interactive Forecast", "📊 Climate Analysis"])
+tab1, tab2, tab3, tab4 = st.tabs(["🌦 Live Weather", "📈 AI Predictions", "🔮 Interactive Analysis", "📊 Climate Trends"])
 
 # ---- TAB 1: LIVE WEATHER ----
 with tab1:
@@ -73,7 +70,6 @@ with tab1:
     if st.button("🔍 Get Live Weather"):
         for city in city_list:
             weather_data = get_live_weather(city)
-
             if weather_data:
                 st.markdown(f"""
                 <div style="text-align: center; background: #ecf0f1; padding: 20px; border-radius: 12px; margin-bottom: 10px;">
@@ -89,9 +85,9 @@ with tab1:
             else:
                 st.error(f"❌ Unable to fetch weather data for {city}.")
 
-# ---- TAB 2: CLIMATE PREDICTIONS ----
+# ---- TAB 2: AI CLIMATE PREDICTIONS ----
 with tab2:
-    st.subheader("📈 Future Climate Predictions")
+    st.subheader("📈 AI-Powered Climate Predictions")
 
     with st.sidebar:
         st.header("📂 Upload Climate Data")
@@ -101,62 +97,50 @@ with tab2:
         df = pd.read_csv(uploaded_file)
         st.write("### Data Preview", df.head())
 
-        if len(df.columns) < 3:
-            st.error("⚠️ The uploaded CSV must have at least 3 columns: Date, Temperature, Humidity.")
+        if len(df.columns) < 2:
+            st.error("⚠️ The uploaded CSV must have at least 2 columns: Date, Temperature.")
         else:
             date_col = df.columns[0]
             temp_col = df.columns[1]
-            humidity_col = df.columns[2]
 
             df[date_col] = pd.to_datetime(df[date_col])
+            df = df.rename(columns={date_col: "ds", temp_col: "y"})
 
-            # Moving Average for Temperature
-            df["Smoothed Temp"] = df[temp_col].rolling(window=5, min_periods=1).mean()
+            # AI Forecasting with Prophet
+            model = Prophet()
+            model.fit(df)
 
-            # Interactive Temperature Trends
-            st.write("### 🌡 Temperature Trends")
-            fig_temp = px.line(df, x=date_col, y=["Smoothed Temp", temp_col], title="Temperature Trends")
-            st.plotly_chart(fig_temp)
+            future = model.make_future_dataframe(periods=30)
+            forecast = model.predict(future)
 
-            # Humidity Analysis
-            st.write("### 💧 Humidity Trends")
-            fig_humidity = px.line(df, x=date_col, y=humidity_col, title="Humidity Trends")
-            st.plotly_chart(fig_humidity)
+            st.write("### 🔮 AI-Powered Temperature Prediction")
+            fig_forecast = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends")
+            st.plotly_chart(fig_forecast)
 
-            # Scatter Plot
-            st.write("### 🔬 Temperature vs Humidity")
-            fig_scatter = px.scatter(df, x=temp_col, y=humidity_col, title="Temperature vs Humidity", opacity=0.7)
-            st.plotly_chart(fig_scatter)
-
-            st.success("✅ Data uploaded successfully! View trends above.")
-
-# ---- TAB 3: INTERACTIVE PREDICTIONS ----
+# ---- TAB 3: INTERACTIVE ANALYSIS ----
 with tab3:
-    st.subheader("🔮 Interactive Forecast")
+    st.subheader("🔮 Interactive Climate Data Analysis")
 
     if uploaded_file:
-        days_to_predict = st.slider("📅 Select Days to Predict", 1, 30, 7)
+        st.write("### 🌡 Temperature vs Humidity")
+        fig_scatter = px.scatter(df, x="y", y=df.columns[2], title="Temperature vs Humidity", opacity=0.7)
+        st.plotly_chart(fig_scatter)
 
-        future_dates = pd.date_range(start=df[date_col].max(), periods=days_to_predict+1, freq="D")[1:]
-        future_temps = df[temp_col].iloc[-1] + np.cumsum(np.random.randn(days_to_predict) * 2)
-        future_humidity = df[humidity_col].iloc[-1] + np.cumsum(np.random.randn(days_to_predict) * 1.5)
+        st.write("### 🔥 Heatmap of Climate Data")
+        fig_heatmap = px.imshow(df.corr(), title="Correlation Heatmap")
+        st.plotly_chart(fig_heatmap)
 
-        future_df = pd.DataFrame({date_col: future_dates, "Predicted Temperature": future_temps, "Predicted Humidity": future_humidity})
+        st.write("### 📊 Histogram of Temperatures")
+        fig_hist = px.histogram(df, x="y", title="Temperature Distribution")
+        st.plotly_chart(fig_hist)
 
-        st.write("### 🔮 Future Temperature Prediction")
-        fig_future_temp = px.line(future_df, x=date_col, y="Predicted Temperature", title="Predicted Temperature")
-        st.plotly_chart(fig_future_temp)
-
-        st.write("### 💧 Future Humidity Prediction")
-        fig_future_humidity = px.line(future_df, x=date_col, y="Predicted Humidity", title="Predicted Humidity")
-        st.plotly_chart(fig_future_humidity)
-
-# ---- TAB 4: CLIMATE ANALYSIS ----
+# ---- TAB 4: CLIMATE TRENDS ----
 with tab4:
-    st.subheader("📊 Climate Analysis")
-    
+    st.subheader("📊 Climate Trends & Comparisons")
+
     if uploaded_file:
         st.write("### 🌍 Compare Historical vs Future Trends")
-        combined_df = pd.concat([df, future_df], ignore_index=True)
-        fig_compare = px.line(combined_df, x=date_col, y=[temp_col, "Predicted Temperature"], title="Historical vs Future Temperature Trends")
+        combined_df = pd.concat([df, forecast.rename(columns={"yhat": "Predicted Temperature"})], ignore_index=True)
+
+        fig_compare = px.line(combined_df, x="ds", y=["y", "Predicted Temperature"], title="Historical vs Future Temperature Trends")
         st.plotly_chart(fig_compare)
