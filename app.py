@@ -11,8 +11,8 @@ mode = st.sidebar.radio("Choose Mode:", ["🌙 Dark Mode", "☀️ Light Mode"])
 theme = "dark" if mode == "🌙 Dark Mode" else "light"
 
 # ---- WEATHERSTACK API CONFIG ----
-API_KEY = "YOUR_WEATHERSTACK_API_KEY"
-
+API_KEY = st.secrets["YOUR_WEATHERSTACK_API_KEY"]
+                     
 def get_live_weather(city):
     """Fetches real-time weather data from Weatherstack API."""
     url = f"http://api.weatherstack.com/current?access_key={API_KEY}&query={city}"
