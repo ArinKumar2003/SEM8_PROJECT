@@ -9,4 +9,3 @@ scikit-learn
 seaborn
 prophet
 streamlit_echarts 
-fbprophet
