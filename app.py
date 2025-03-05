@@ -34,18 +34,26 @@ def get_live_weather(city):
 # ---- MAIN PAGE CONTENT ----
 st.subheader("🌦 Live Weather Conditions")
 
-# Input for city on the main page
-city = st.text_input("Enter City", value="New York")
-if st.button("🔍 Get Live Weather"):
-    weather_data = get_live_weather(city)
+# Use columns for a more structured layout
+col1, col2 = st.columns([2, 3])
 
-    if weather_data:
-        temp = weather_data["temperature"]
-        desc = weather_data["description"]
-        humidity = weather_data["humidity"]
-        wind_speed = weather_data["wind_speed"]
+with col1:
+    city = st.text_input("Enter City", value="New York")
+    if st.button("🔍 Get Live Weather"):
+        st.session_state.weather_city = city  # Store city in session
 
-        # Display live weather details in a visually appealing layout
+# Fetch weather data
+city = st.session_state.get("weather_city", "New York")
+weather_data = get_live_weather(city)
+
+if weather_data:
+    temp = weather_data["temperature"]
+    desc = weather_data["description"]
+    humidity = weather_data["humidity"]
+    wind_speed = weather_data["wind_speed"]
+
+    # Display weather info using a nice UI
+    with col2:
         st.markdown(f"""
         <div style="text-align: center; background: #ecf0f1; padding: 20px; border-radius: 12px;">
             <h2>🌆 {city}</h2>
@@ -55,10 +63,8 @@ if st.button("🔍 Get Live Weather"):
             <p>🌬 Wind Speed: <b>{wind_speed} km/h</b></p>
         </div>
         """, unsafe_allow_html=True)
-    else:
-        st.error("❌ Unable to fetch weather data. Check city name or API key.")
 else:
-    st.info("Enter a city name and click 'Get Live Weather' to see the conditions.")
+    st.error("❌ Unable to fetch weather data. Check city name or API key.")
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -78,3 +84,5 @@ if uploaded_file:
     st.success("✅ Data uploaded successfully! Choose a model to proceed.")
 else:
     st.info("📂 Upload a CSV file to generate predictions.")
+
+st.markdown("<h4 style='text-align: center;'>🔍 AI-Driven Climate Insights for a Sustainable Future</h4>", unsafe_allow_html=True)
