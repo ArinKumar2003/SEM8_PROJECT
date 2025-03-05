@@ -45,4 +45,60 @@ with tabs[0]:
 
             # Display weather details
             st.markdown(f"""
-            <div st
+            <div style="text-align: center; padding: 20px; border-radius: 12px; background: {'#2c3e50' if theme == 'dark' else '#ecf0f1'}; color: {'white' if theme == 'dark' else 'black'};">
+                <h2>🌆 {city}</h2>
+                <h1 style="color:#e74c3c;">🌡 {temp}°C</h1>
+                <h3>☁️ {desc}</h3>
+                <p>💧 Humidity: <b>{humidity}%</b></p>
+                <p>🌬 Wind Speed: <b>{wind_speed} km/h</b></p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.error("❌ Unable to fetch weather data. Check city name or API key.")
+
+# ---- TAB 2: UPLOAD DATA ----
+with tabs[1]:
+    st.subheader("📂 Upload Climate Data")
+    uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
+
+    if uploaded_file:
+        df = pd.read_csv(uploaded_file)
+
+        # Fixing PyArrow timestamp issue
+        date_col = df.columns[0]  # Assuming first column is date
+        df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+        df = df.dropna(subset=[date_col])  # Drop invalid dates
+
+        st.write("### 📋 Data Preview", df.head())
+
+# ---- TAB 3: PREDICTIONS ----
+with tabs[2]:
+    st.subheader("📈 Future Climate Predictions")
+
+    # Model selection
+    model_choice = st.radio("Choose Prediction Model:", ["Gradient Boosting", "LSTM", "Prophet"])
+
+    if uploaded_file:
+        st.success("✅ Data uploaded! Choose a model to proceed.")
+
+        # Dummy prediction visualization (Replace with actual model implementation)
+        fig = px.line(df, x=date_col, y=df.columns[1], title="📊 Future Climate Predictions")
+        st.plotly_chart(fig)
+
+# ---- TAB 4: ANALYTICS ----
+with tabs[3]:
+    st.subheader("📊 Climate Data Analytics")
+
+    if uploaded_file:
+        st.write("## 🌡 Temperature Trend")
+        fig_temp = px.line(df, x=date_col, y=df.columns[1], title="Temperature Trends Over Time")
+        st.plotly_chart(fig_temp)
+
+        st.write("## 💧 Humidity Levels")
+        fig_hum = px.bar(df, x=date_col, y=df.columns[2], title="Humidity Levels Over Time")
+        st.plotly_chart(fig_hum)
+
+        st.write("## 🌬 Wind Speed Trends")
+        fig_wind = px.scatter(df, x=date_col, y=df.columns[3], title="Wind Speed Variations")
+        st.plotly_chart(fig_wind)
+
