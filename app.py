@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.express as px
+import numpy as np
 
 # ---- STREAMLIT PAGE CONFIG ----
 st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
@@ -12,13 +13,8 @@ if theme == "Dark Mode":
     st.markdown(
         """
         <style>
-            body {
-                background-color: #1E1E1E;
-                color: white;
-            }
-            .stApp {
-                background-color: #1E1E1E;
-            }
+            body { background-color: #1E1E1E; color: white; }
+            .stApp { background-color: #1E1E1E; }
         </style>
         """,
         unsafe_allow_html=True
@@ -28,7 +24,7 @@ if theme == "Dark Mode":
 st.markdown(
     """
     <h1 style='text-align: center; color: #2c3e50;'>🌍 AI Climate Change Prediction Dashboard</h1>
-    <h3 style='text-align: center; color: #7f8c8d;'>📊 Live Weather & Future Climate Predictions</h3>
+    <h3 style='text-align: center; color: #7f8c8d;'>📊 Live Weather, Predictions & Interactive Analysis</h3>
     <hr>
     """,
     unsafe_allow_html=True
@@ -55,8 +51,8 @@ def get_live_weather(city):
     else:
         return None
 
-# ---- TABS FOR BETTER NAVIGATION ----
-tab1, tab2 = st.tabs(["🌦 Live Weather", "📈 Climate Predictions"])
+# ---- TABS FOR NAVIGATION ----
+tab1, tab2, tab3, tab4 = st.tabs(["🌦 Live Weather", "📈 Climate Predictions", "🔮 Interactive Forecast", "📊 Climate Analysis"])
 
 # ---- TAB 1: LIVE WEATHER ----
 with tab1:
@@ -88,8 +84,6 @@ with tab1:
             """, unsafe_allow_html=True)
         else:
             st.error("❌ Unable to fetch weather data. Check city name or API key.")
-    else:
-        st.info("Enter a city name and click 'Get Live Weather' to see the conditions.")
 
 # ---- TAB 2: CLIMATE PREDICTIONS ----
 with tab2:
@@ -137,7 +131,35 @@ with tab2:
             st.write(df.describe())
 
             st.success("✅ Data uploaded successfully! View trends above.")
-    else:
-        st.info("📂 Upload a CSV file to generate predictions.")
 
-st.markdown("<hr>", unsafe_allow_html=True)
+# ---- TAB 3: INTERACTIVE PREDICTIONS ----
+with tab3:
+    st.subheader("🔮 Interactive Forecast")
+
+    if uploaded_file:
+        days_to_predict = st.slider("📅 Select Days to Predict", 1, 30, 7)
+
+        # Generate random future predictions for demo
+        future_dates = pd.date_range(start=df[date_col].max(), periods=days_to_predict+1, freq="D")[1:]
+        future_temps = df[temp_col].iloc[-1] + np.cumsum(np.random.randn(days_to_predict) * 2)
+        future_humidity = df[humidity_col].iloc[-1] + np.cumsum(np.random.randn(days_to_predict) * 1.5)
+
+        future_df = pd.DataFrame({date_col: future_dates, "Predicted Temperature": future_temps, "Predicted Humidity": future_humidity})
+        
+        st.write("### 🔮 Future Temperature Prediction")
+        fig_future_temp = px.line(future_df, x=date_col, y="Predicted Temperature", title="Predicted Temperature", markers=True)
+        st.plotly_chart(fig_future_temp, use_container_width=True)
+
+        st.write("### 💧 Future Humidity Prediction")
+        fig_future_humidity = px.line(future_df, x=date_col, y="Predicted Humidity", title="Predicted Humidity", markers=True)
+        st.plotly_chart(fig_future_humidity, use_container_width=True)
+
+# ---- TAB 4: CLIMATE ANALYSIS ----
+with tab4:
+    st.subheader("📊 Climate Analysis")
+    
+    if uploaded_file:
+        st.write("### 🌍 Compare Historical vs Future Trends")
+        combined_df = pd.concat([df, future_df], ignore_index=True)
+        fig_compare = px.line(combined_df, x=date_col, y=[temp_col, "Predicted Temperature"], title="Historical vs Future Temperature Trends")
+        st.plotly_chart(fig_compare, use_container_width=True)
