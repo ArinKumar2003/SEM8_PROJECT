@@ -6,15 +6,36 @@ import plotly.express as px
 # ---- STREAMLIT PAGE CONFIG ----
 st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
 
+# ---- THEME TOGGLE (DARK/LIGHT MODE) ----
+theme = st.sidebar.radio("🌗 Theme", ["Light Mode", "Dark Mode"])
+if theme == "Dark Mode":
+    st.markdown(
+        """
+        <style>
+            body {
+                background-color: #1E1E1E;
+                color: white;
+            }
+            .stApp {
+                background-color: #1E1E1E;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
 # ---- DASHBOARD HEADER ----
-st.markdown("""
-    <h1 style='text-align: center; color: #2c3e50; font-size: 36px;'>🌍 AI Climate Change Prediction Dashboard</h1>
+st.markdown(
+    """
+    <h1 style='text-align: center; color: #2c3e50;'>🌍 AI Climate Change Prediction Dashboard</h1>
     <h3 style='text-align: center; color: #7f8c8d;'>📊 Live Weather & Future Climate Predictions</h3>
-    <hr style="border:1px solid #ddd;">
-""", unsafe_allow_html=True)
+    <hr>
+    """,
+    unsafe_allow_html=True
+)
 
 # ---- WEATHERSTACK API CONFIG ----
-API_KEY = st.secrets["WEATHERSTACK_API_KEY"]  # Ensure this exists in your secrets.toml
+API_KEY = st.secrets["WEATHERSTACK_API_KEY"]  # Ensure this is set in secrets.toml
 
 def get_live_weather(city):
     """Fetches real-time weather data from Weatherstack API."""
@@ -27,7 +48,9 @@ def get_live_weather(city):
             "temperature": data["current"]["temperature"],
             "description": data["current"]["weather_descriptions"][0],
             "humidity": data["current"]["humidity"],
-            "wind_speed": data["current"]["wind_speed"]
+            "wind_speed": data["current"]["wind_speed"],
+            "feels_like": data["current"]["feelslike"],
+            "pressure": data["current"]["pressure"],
         }
     else:
         return None
@@ -48,6 +71,8 @@ with tab1:
             desc = weather_data["description"]
             humidity = weather_data["humidity"]
             wind_speed = weather_data["wind_speed"]
+            feels_like = weather_data["feels_like"]
+            pressure = weather_data["pressure"]
 
             # Display live weather details
             st.markdown(f"""
@@ -57,6 +82,8 @@ with tab1:
                 <h3>☁️ {desc}</h3>
                 <p>💧 Humidity: <b>{humidity}%</b></p>
                 <p>🌬 Wind Speed: <b>{wind_speed} km/h</b></p>
+                <p>🌡 Feels Like: <b>{feels_like}°C</b></p>
+                <p>🛠 Pressure: <b>{pressure} hPa</b></p>
             </div>
             """, unsafe_allow_html=True)
         else:
@@ -77,16 +104,39 @@ with tab2:
         df = pd.read_csv(uploaded_file)
         st.write("### Data Preview", df.head())
 
-        # Create a line chart visualization
-        st.write("### 🌡 Temperature Trends")
-        fig = px.line(df, x=df.columns[0], y=df.columns[1], title="Temperature Trend Over Time")
-        st.plotly_chart(fig, use_container_width=True)
+        # Ensure the dataset has required columns
+        if len(df.columns) < 3:
+            st.error("⚠️ The uploaded CSV must have at least 3 columns: Date, Temperature, Humidity, Wind Speed.")
+        else:
+            date_col = df.columns[0]
+            temp_col = df.columns[1]
+            humidity_col = df.columns[2]
+            wind_col = df.columns[3] if len(df.columns) > 3 else None
 
-        # Show statistical summary
-        st.write("### 📊 Summary Statistics")
-        st.write(df.describe())
+            # Convert date column to datetime format
+            df[date_col] = pd.to_datetime(df[date_col])
 
-        st.success("✅ Data uploaded successfully! Choose a model to proceed.")
+            # Temperature Trend
+            st.write("### 🌡 Temperature Trends")
+            fig_temp = px.line(df, x=date_col, y=temp_col, title="Temperature Trend Over Time", markers=True)
+            st.plotly_chart(fig_temp, use_container_width=True)
+
+            # Humidity Trend
+            st.write("### 💧 Humidity Trends")
+            fig_humidity = px.line(df, x=date_col, y=humidity_col, title="Humidity Trend Over Time", markers=True)
+            st.plotly_chart(fig_humidity, use_container_width=True)
+
+            # Wind Speed Trend (if available)
+            if wind_col:
+                st.write("### 🌬 Wind Speed Trends")
+                fig_wind = px.line(df, x=date_col, y=wind_col, title="Wind Speed Trend Over Time", markers=True)
+                st.plotly_chart(fig_wind, use_container_width=True)
+
+            # Show statistical summary
+            st.write("### 📊 Summary Statistics")
+            st.write(df.describe())
+
+            st.success("✅ Data uploaded successfully! View trends above.")
     else:
         st.info("📂 Upload a CSV file to generate predictions.")
 
