@@ -1,6 +1,8 @@
 import streamlit as st
 import requests
 import pandas as pd
+import plotly.express as px
+from streamlit_echarts import st_echarts
 
 # ---- STREAMLIT PAGE CONFIG ----
 st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
@@ -34,7 +36,7 @@ def get_live_weather(city):
 # ---- MAIN PAGE CONTENT ----
 st.subheader("🌦 Live Weather Conditions")
 
-# Use columns for a more structured layout
+# Use columns for better layout
 col1, col2 = st.columns([2, 3])
 
 with col1:
@@ -52,12 +54,14 @@ if weather_data:
     humidity = weather_data["humidity"]
     wind_speed = weather_data["wind_speed"]
 
-    # Display weather info using a nice UI
+    # Dynamic icons based on weather conditions
+    weather_icon = "☀️" if "Sunny" in desc else "☁️" if "Cloud" in desc else "🌧️" if "Rain" in desc else "🌪️"
+
     with col2:
         st.markdown(f"""
         <div style="text-align: center; background: #ecf0f1; padding: 20px; border-radius: 12px;">
             <h2>🌆 {city}</h2>
-            <h1 style="color:#e74c3c;">🌡 {temp}°C</h1>
+            <h1 style="color:#e74c3c;">{weather_icon} {temp}°C</h1>
             <h3>☁️ {desc}</h3>
             <p>💧 Humidity: <b>{humidity}%</b></p>
             <p>🌬 Wind Speed: <b>{wind_speed} km/h</b></p>
@@ -67,6 +71,18 @@ else:
     st.error("❌ Unable to fetch weather data. Check city name or API key.")
 
 st.markdown("<hr>", unsafe_allow_html=True)
+
+# ---- WEATHER TREND CHART ----
+st.subheader("📊 Temperature Trend Visualization")
+
+# Simulated historical weather data for visualization
+weather_history = pd.DataFrame({
+    "Day": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "Temperature": [23, 25, 22, 26, 27, 24, 25]
+})
+
+fig = px.line(weather_history, x="Day", y="Temperature", markers=True, title="Past Week Temperature Trend")
+st.plotly_chart(fig, use_container_width=True)
 
 # ---- SIDEBAR ----
 with st.sidebar:
@@ -81,7 +97,28 @@ st.subheader("📈 Future Climate Predictions")
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
     st.write(df.head())  # Display first few rows
-    st.success("✅ Data uploaded successfully! Choose a model to proceed.")
+    st.success("✅ Data uploaded successfully! Generating Insights...")
+
+    # ---- INTERACTIVE CLIMATE INSIGHTS ----
+    st.subheader("🌡 Temperature & Humidity Trends")
+
+    # Convert Date column to datetime if available
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+
+    # Plot Temperature and Humidity Trends using ECharts
+    options = {
+        "tooltip": {"trigger": "axis"},
+        "xAxis": {"type": "category", "data": df["Date"].astype(str).tolist() if "Date" in df.columns else df.index.tolist()},
+        "yAxis": {"type": "value"},
+        "series": [
+            {"name": "Temperature", "type": "line", "data": df["Temperature"].tolist() if "Temperature" in df.columns else []},
+            {"name": "Humidity", "type": "line", "data": df["Humidity"].tolist() if "Humidity" in df.columns else []}
+        ]
+    }
+
+    st_echarts(options=options, height="400px")
+
 else:
     st.info("📂 Upload a CSV file to generate predictions.")
 
