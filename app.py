@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import plotly.express as px
 import numpy as np
+import datetime
 
 # ---- STREAMLIT CONFIG ----
 st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
@@ -33,7 +34,7 @@ st.markdown(
 
 # ---- WEATHERSTACK API CONFIG ----
 try:
-    API_KEY = st.secrets["WEATHERSTACK_API_KEY"]  
+    API_KEY = st.secrets["WEATHERSTACK_API_KEY"]
 except KeyError:
     st.error("❌ API key is missing. Set `WEATHERSTACK_API_KEY` in `secrets.toml`.")
     API_KEY = None
@@ -65,33 +66,28 @@ tab1, tab2, tab3, tab4 = st.tabs(["🌦 Live Weather", "📈 Climate Predictions
 # ---- TAB 1: LIVE WEATHER ----
 with tab1:
     st.subheader("🌦 Live Weather Conditions")
-    city = st.text_input("Enter City", value="New York")
+
+    cities = st.text_input("Enter Cities (comma-separated)", value="New York, London, Tokyo")
+    city_list = [city.strip() for city in cities.split(",")]
 
     if st.button("🔍 Get Live Weather"):
-        weather_data = get_live_weather(city)
+        for city in city_list:
+            weather_data = get_live_weather(city)
 
-        if weather_data:
-            temp = weather_data["temperature"]
-            desc = weather_data["description"]
-            humidity = weather_data["humidity"]
-            wind_speed = weather_data["wind_speed"]
-            feels_like = weather_data["feels_like"]
-            pressure = weather_data["pressure"]
-
-            # Display weather details
-            st.markdown(f"""
-            <div style="text-align: center; background: #ecf0f1; padding: 20px; border-radius: 12px;">
-                <h2>🌆 {city}</h2>
-                <h1 style="color:#e74c3c;">🌡 {temp}°C</h1>
-                <h3>☁️ {desc}</h3>
-                <p>💧 Humidity: <b>{humidity}%</b></p>
-                <p>🌬 Wind Speed: <b>{wind_speed} km/h</b></p>
-                <p>🌡 Feels Like: <b>{feels_like}°C</b></p>
-                <p>🛠 Pressure: <b>{pressure} hPa</b></p>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.error("❌ Unable to fetch weather data. Check city name or API key.")
+            if weather_data:
+                st.markdown(f"""
+                <div style="text-align: center; background: #ecf0f1; padding: 20px; border-radius: 12px; margin-bottom: 10px;">
+                    <h2>🌆 {city}</h2>
+                    <h1 style="color:#e74c3c;">🌡 {weather_data["temperature"]}°C</h1>
+                    <h3>☁️ {weather_data["description"]}</h3>
+                    <p>💧 Humidity: <b>{weather_data["humidity"]}%</b></p>
+                    <p>🌬 Wind Speed: <b>{weather_data["wind_speed"]} km/h</b></p>
+                    <p>🌡 Feels Like: <b>{weather_data["feels_like"]}°C</b></p>
+                    <p>🛠 Pressure: <b>{weather_data["pressure"]} hPa</b></p>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.error(f"❌ Unable to fetch weather data for {city}.")
 
 # ---- TAB 2: CLIMATE PREDICTIONS ----
 with tab2:
@@ -114,23 +110,23 @@ with tab2:
 
             df[date_col] = pd.to_datetime(df[date_col])
 
-            # Smooth Temperature Trend
+            # Moving Average for Temperature
             df["Smoothed Temp"] = df[temp_col].rolling(window=5, min_periods=1).mean()
 
-            # Temperature Trend
+            # Interactive Temperature Trends
             st.write("### 🌡 Temperature Trends")
             fig_temp = px.line(df, x=date_col, y=["Smoothed Temp", temp_col], title="Temperature Trends")
             st.plotly_chart(fig_temp)
 
-            # Humidity Trend
+            # Humidity Analysis
             st.write("### 💧 Humidity Trends")
             fig_humidity = px.line(df, x=date_col, y=humidity_col, title="Humidity Trends")
             st.plotly_chart(fig_humidity)
 
-            # Histogram
-            st.write("### 📊 Temperature Distribution")
-            fig_hist = px.histogram(df, x=temp_col, title="Temperature Distribution", nbins=30)
-            st.plotly_chart(fig_hist)
+            # Scatter Plot
+            st.write("### 🔬 Temperature vs Humidity")
+            fig_scatter = px.scatter(df, x=temp_col, y=humidity_col, title="Temperature vs Humidity", opacity=0.7)
+            st.plotly_chart(fig_scatter)
 
             st.success("✅ Data uploaded successfully! View trends above.")
 
