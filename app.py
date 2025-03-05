@@ -147,6 +147,5 @@ with tab6:
     """)
     st.image("https://earthobservatory.nasa.gov/blogs/earthmatters/wp-content/uploads/sites/9/2019/05/earthmap.png")
 
----
 
 
