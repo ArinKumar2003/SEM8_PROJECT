@@ -149,11 +149,4 @@ with tab6:
 
 ---
 
-## **🚀 Final Upgrades Recap**
-✔ **Multi-City Weather** 🌍  
-✔ **AI-Powered Forecasting (Prophet, LSTMs Coming Soon!)** 🤖  
-✔ **Interactive Trends & Climate Score Analysis** 📊  
-✔ **Extreme Weather Alerts & Heatwave Detection** ⚠️  
-✔ **Live Satellite View (Future API Integration)** 🛰️  
 
-🔥 **Want more AI models, real-time maps, or other features?** Let’s build it! 🚀
