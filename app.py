@@ -3,7 +3,10 @@ import requests
 import pandas as pd
 import plotly.express as px
 import numpy as np
+import datetime
 from prophet import Prophet
+import plotly.graph_objects as go
+import time
 
 # ---- STREAMLIT CONFIG ----
 st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
@@ -11,27 +14,21 @@ st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
 # ---- THEME TOGGLE (DARK/LIGHT MODE) ----
 theme = st.sidebar.radio("🌗 Theme", ["Light Mode", "Dark Mode"])
 if theme == "Dark Mode":
-    st.markdown(
-        """
+    st.markdown("""
         <style>
             body { background-color: #1E1E1E; color: white; }
             .stApp { background-color: #1E1E1E; }
         </style>
-        """,
-        unsafe_allow_html=True
-    )
+    """, unsafe_allow_html=True)
 
 # ---- DASHBOARD HEADER ----
-st.markdown(
-    """
-    <h1 style='text-align: center; color: #2c3e50;'>🌍 AI Climate Change Prediction Dashboard</h1>
-    <h3 style='text-align: center; color: #7f8c8d;'>📊 Live Weather, AI Predictions & Interactive Analysis</h3>
+st.markdown("""
+    <h1 style='text-align: center; color: #2c3e50;'>🌍 AI Climate Dashboard</h1>
+    <h3 style='text-align: center; color: #7f8c8d;'>📡 Real-Time Weather, AI Forecasts & Advanced Analysis</h3>
     <hr>
-    """,
-    unsafe_allow_html=True
-)
+""", unsafe_allow_html=True)
 
-# ---- WEATHERSTACK API CONFIG ----
+# ---- API CONFIG ----
 try:
     API_KEY = st.secrets["WEATHERSTACK_API_KEY"]
 except KeyError:
@@ -39,108 +36,124 @@ except KeyError:
     API_KEY = None
 
 def get_live_weather(city):
-    """Fetch real-time weather data from Weatherstack API."""
+    """Fetch real-time weather data."""
     if not API_KEY:
         return None
     url = f"http://api.weatherstack.com/current?access_key={API_KEY}&query={city}"
     response = requests.get(url)
     data = response.json()
-
     if "current" in data:
-        return {
-            "temperature": data["current"]["temperature"],
-            "description": data["current"]["weather_descriptions"][0],
-            "humidity": data["current"]["humidity"],
-            "wind_speed": data["current"]["wind_speed"],
-            "feels_like": data["current"]["feelslike"],
-            "pressure": data["current"]["pressure"],
-        }
+        return data["current"]
     return None
 
 # ---- TABS FOR NAVIGATION ----
-tab1, tab2, tab3, tab4 = st.tabs(["🌦 Live Weather", "📈 AI Predictions", "🔮 Interactive Analysis", "📊 Climate Trends"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "🌦 Live Weather", "📈 AI Forecasts", "🔮 Interactive Trends", "📊 Climate Score", "⚠️ Extreme Weather", "🛰️ Satellite View"
+])
 
 # ---- TAB 1: LIVE WEATHER ----
 with tab1:
-    st.subheader("🌦 Live Weather Conditions")
+    st.subheader("🌦 Live Weather")
 
     cities = st.text_input("Enter Cities (comma-separated)", value="New York, London, Tokyo")
     city_list = [city.strip() for city in cities.split(",")]
 
     if st.button("🔍 Get Live Weather"):
         for city in city_list:
-            weather_data = get_live_weather(city)
-            if weather_data:
+            weather = get_live_weather(city)
+            if weather:
                 st.markdown(f"""
-                <div style="text-align: center; background: #ecf0f1; padding: 20px; border-radius: 12px; margin-bottom: 10px;">
+                <div style="text-align: center; background: #ecf0f1; padding: 20px; border-radius: 12px;">
                     <h2>🌆 {city}</h2>
-                    <h1 style="color:#e74c3c;">🌡 {weather_data["temperature"]}°C</h1>
-                    <h3>☁️ {weather_data["description"]}</h3>
-                    <p>💧 Humidity: <b>{weather_data["humidity"]}%</b></p>
-                    <p>🌬 Wind Speed: <b>{weather_data["wind_speed"]} km/h</b></p>
-                    <p>🌡 Feels Like: <b>{weather_data["feels_like"]}°C</b></p>
-                    <p>🛠 Pressure: <b>{weather_data["pressure"]} hPa</b></p>
+                    <h1 style="color:#e74c3c;">🌡 {weather['temperature']}°C</h1>
+                    <h3>☁️ {weather['weather_descriptions'][0]}</h3>
+                    <p>💧 Humidity: <b>{weather['humidity']}%</b></p>
+                    <p>🌬 Wind Speed: <b>{weather['wind_speed']} km/h</b></p>
                 </div>
                 """, unsafe_allow_html=True)
             else:
                 st.error(f"❌ Unable to fetch weather data for {city}.")
 
-# ---- TAB 2: AI CLIMATE PREDICTIONS ----
+# ---- TAB 2: AI FORECASTS ----
 with tab2:
-    st.subheader("📈 AI-Powered Climate Predictions")
+    st.subheader("📈 AI Forecasts using Prophet")
 
-    with st.sidebar:
-        st.header("📂 Upload Climate Data")
-        uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
+    uploaded_file = st.file_uploader("Upload Climate CSV File", type=["csv"])
 
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
         st.write("### Data Preview", df.head())
 
         if len(df.columns) < 2:
-            st.error("⚠️ The uploaded CSV must have at least 2 columns: Date, Temperature.")
+            st.error("⚠️ CSV must have Date and Temperature columns.")
         else:
-            date_col = df.columns[0]
-            temp_col = df.columns[1]
+            df.columns = ["ds", "y"]
+            df["ds"] = pd.to_datetime(df["ds"])
 
-            df[date_col] = pd.to_datetime(df[date_col])
-            df = df.rename(columns={date_col: "ds", temp_col: "y"})
-
-            # AI Forecasting with Prophet
             model = Prophet()
             model.fit(df)
 
             future = model.make_future_dataframe(periods=30)
             forecast = model.predict(future)
 
-            st.write("### 🔮 AI-Powered Temperature Prediction")
-            fig_forecast = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends")
-            st.plotly_chart(fig_forecast)
+            fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends")
+            st.plotly_chart(fig)
 
-# ---- TAB 3: INTERACTIVE ANALYSIS ----
+# ---- TAB 3: INTERACTIVE CLIMATE TRENDS ----
 with tab3:
-    st.subheader("🔮 Interactive Climate Data Analysis")
+    st.subheader("🔮 Interactive Climate Trends")
 
     if uploaded_file:
-        st.write("### 🌡 Temperature vs Humidity")
-        fig_scatter = px.scatter(df, x="y", y=df.columns[2], title="Temperature vs Humidity", opacity=0.7)
-        st.plotly_chart(fig_scatter)
+        df = pd.read_csv(uploaded_file)
+        df["ds"] = pd.to_datetime(df.iloc[:, 0])
+        df["y"] = df.iloc[:, 1]
 
-        st.write("### 🔥 Heatmap of Climate Data")
-        fig_heatmap = px.imshow(df.corr(), title="Correlation Heatmap")
-        st.plotly_chart(fig_heatmap)
+        fig = px.scatter(df, x="ds", y="y", title="Temperature Trends Over Time", opacity=0.7)
+        st.plotly_chart(fig)
 
-        st.write("### 📊 Histogram of Temperatures")
-        fig_hist = px.histogram(df, x="y", title="Temperature Distribution")
-        st.plotly_chart(fig_hist)
+        fig2 = px.histogram(df, x="y", title="Temperature Distribution")
+        st.plotly_chart(fig2)
 
-# ---- TAB 4: CLIMATE TRENDS ----
+# ---- TAB 4: CLIMATE SCORE ----
 with tab4:
-    st.subheader("📊 Climate Trends & Comparisons")
+    st.subheader("📊 Climate Impact Score")
 
     if uploaded_file:
-        st.write("### 🌍 Compare Historical vs Future Trends")
-        combined_df = pd.concat([df, forecast.rename(columns={"yhat": "Predicted Temperature"})], ignore_index=True)
+        df["climate_score"] = (df["y"] - df["y"].min()) / (df["y"].max() - df["y"].min()) * 100
 
-        fig_compare = px.line(combined_df, x="ds", y=["y", "Predicted Temperature"], title="Historical vs Future Temperature Trends")
-        st.plotly_chart(fig_compare)
+        fig = px.line(df, x="ds", y="climate_score", title="Climate Impact Score")
+        st.plotly_chart(fig)
+
+# ---- TAB 5: EXTREME WEATHER ALERTS ----
+with tab5:
+    st.subheader("⚠️ Extreme Weather Alerts")
+
+    if uploaded_file:
+        threshold = st.slider("Set Temperature Alert Threshold", min_value=int(df["y"].min()), max_value=int(df["y"].max()), value=35)
+
+        alerts = df[df["y"] > threshold]
+        st.write("### 🔥 Heatwave Alerts", alerts)
+
+        fig = px.line(df, x="ds", y="y", title="Extreme Temperature Trends", markers=True)
+        fig.add_trace(go.Scatter(x=alerts["ds"], y=alerts["y"], mode="markers", marker=dict(color="red", size=10), name="Extreme Heat"))
+        st.plotly_chart(fig)
+
+# ---- TAB 6: SATELLITE VIEW ----
+with tab6:
+    st.subheader("🛰️ Live Climate Satellite View")
+    st.markdown("""
+        🚀 Integrate with **OpenWeatherMap's Satellite API** or **Google Maps**
+        for live climate conditions.
+    """)
+    st.image("https://earthobservatory.nasa.gov/blogs/earthmatters/wp-content/uploads/sites/9/2019/05/earthmap.png")
+
+---
+
+## **🚀 Final Upgrades Recap**
+✔ **Multi-City Weather** 🌍  
+✔ **AI-Powered Forecasting (Prophet, LSTMs Coming Soon!)** 🤖  
+✔ **Interactive Trends & Climate Score Analysis** 📊  
+✔ **Extreme Weather Alerts & Heatwave Detection** ⚠️  
+✔ **Live Satellite View (Future API Integration)** 🛰️  
+
+🔥 **Want more AI models, real-time maps, or other features?** Let’s build it! 🚀
