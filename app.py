@@ -68,19 +68,26 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("📈 AI Climate Forecasts")
     uploaded_file = st.file_uploader("Upload Climate CSV File", type=["csv"])
-    if uploaded_file:
-        df = pd.read_csv(uploaded_file)
-        if "Years" in df.columns and "Temperature" in df.columns:
-            df["ds"] = pd.to_datetime(df[["Years", "Month", "Day"]])
-            df = df[["ds", "Temperature"]].rename(columns={"Temperature": "y"})
-            model = Prophet()
-            model.fit(df)
-            future = model.make_future_dataframe(periods=30)
-            forecast = model.predict(future)
-            fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends")
-            st.plotly_chart(fig)
-        else:
-            st.error("⚠️ Invalid CSV format. Required columns: Years, Month, Day, Temperature.")
+    if uploaded_file is not None:
+        try:
+            df = pd.read_csv(uploaded_file)
+            if df.empty:
+                st.error("⚠️ Uploaded CSV is empty. Please upload a valid file.")
+            elif "Years" in df.columns and "Temperature" in df.columns:
+                df["ds"] = pd.to_datetime(df[["Years", "Month", "Day"]])
+                df = df[["ds", "Temperature"]].rename(columns={"Temperature": "y"})
+                model = Prophet()
+                model.fit(df)
+                future = model.make_future_dataframe(periods=30)
+                forecast = model.predict(future)
+                fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends")
+                st.plotly_chart(fig)
+            else:
+                st.error("⚠️ Invalid CSV format. Required columns: Years, Month, Day, Temperature.")
+        except pd.errors.EmptyDataError:
+            st.error("⚠️ Error: The uploaded file is empty or corrupted.")
+        except Exception as e:
+            st.error(f"❌ Unexpected Error: {str(e)}")
 
 # ---- TAB 3: INTERACTIVE TRENDS ----
 with tabs[2]:
