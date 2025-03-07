@@ -69,14 +69,14 @@ if uploaded_file:
     if error_message:
         st.sidebar.error(error_message)
 
-# ---- TABS ----
-tabs = st.tabs([
+# ---- NAVIGATION FIX ----
+menu = st.sidebar.radio("📌 Select a Section", [
     "🌦 Live Weather", "📈 AI Forecasts", "🔮 Trends", "📊 Climate Score",
     "⚠️ Extreme Weather", "🛰️ Satellite View", "🌍 Air Quality", "🌱 Carbon Footprint", "📰 Climate News"
 ])
 
 # ---- TAB 1: LIVE WEATHER ----
-with tabs[0]:
+if menu == "🌦 Live Weather":
     st.subheader("🌦 Live Weather")
     cities = st.text_input("Enter Cities (comma-separated)", "New York, London, Tokyo")
     city_list = [city.strip() for city in cities.split(",")]
@@ -93,7 +93,7 @@ with tabs[0]:
                 st.error(f"❌ No data for {city}")
 
 # ---- TAB 2: AI FORECASTS ----
-with tabs[1]:
+if menu == "📈 AI Forecasts":
     st.subheader("📈 AI Climate Forecasts")
     if df is not None and len(df) > 2:
         with st.spinner("🔄 Training AI Model..."):
@@ -108,14 +108,14 @@ with tabs[1]:
         st.error("⚠️ Not enough data to train AI model.")
 
 # ---- TAB 3: INTERACTIVE TRENDS ----
-with tabs[2]:
+if menu == "🔮 Trends":
     st.subheader("🔮 Interactive Climate Trends")
     if df is not None:
         fig1 = px.scatter(df, x="ds", y="y", title="Temperature Trends Over Time", trendline="lowess")
         st.plotly_chart(fig1)
 
 # ---- TAB 4: CLIMATE SCORE ----
-with tabs[3]:
+if menu == "📊 Climate Score":
     st.subheader("📊 Climate Impact Score")
     if df is not None:
         df["climate_score"] = (df["y"] - df["y"].min()) / (df["y"].max() - df["y"].min()) * 100
@@ -123,7 +123,7 @@ with tabs[3]:
         st.plotly_chart(fig)
 
 # ---- TAB 5: EXTREME WEATHER ----
-with tabs[4]:
+if menu == "⚠️ Extreme Weather":
     st.subheader("⚠️ Extreme Weather Alerts")
     if df is not None:
         threshold = st.slider("Set Temperature Alert Threshold", int(df["y"].min()), int(df["y"].max()), 35)
@@ -131,7 +131,7 @@ with tabs[4]:
         st.write("### 🔥 Heatwave Alerts", alerts)
 
 # ---- TAB 6: SATELLITE VIEW ----
-with tabs[5]:
+if menu == "🛰️ Satellite View":
     st.subheader("🛰️ Live Climate Satellite View")
     city = st.text_input("Enter City for Satellite View", "New York")
     if st.button("🛰️ Get Satellite View"):
@@ -139,20 +139,19 @@ with tabs[5]:
         st.image(satellite_url, caption=f"Satellite View of {city}")
 
 # ---- TAB 7: AIR QUALITY ----
-with tabs[6]:
+if menu == "🌍 Air Quality":
     st.subheader("🌍 Air Quality Index (AQI)")
     st.write("🚀 Integrate with OpenWeather API for real-time AQI data.")
     st.image("https://www.iqair.com/assets/img/aqi-us-en.png")
 
 # ---- TAB 8: CARBON FOOTPRINT ----
-with tabs[7]:
+if menu == "🌱 Carbon Footprint":
     st.subheader("🌱 Carbon Footprint Tracker")
     st.write("⚡ Estimate your personal carbon footprint based on travel, energy use, and consumption.")
     st.image("https://upload.wikimedia.org/wikipedia/commons/5/5f/Carbon_Footprint.png")
 
 # ---- TAB 9: CLIMATE NEWS ----
-with tabs[8]:
+if menu == "📰 Climate News":
     st.subheader("📰 Latest Climate News")
     st.write("🌎 Stay updated with real-time climate news from global sources.")
     st.image("https://www.un.org/sites/un2.un.org/files/2021/08/ipcc_sixth_assessment_report.jpg")
-
