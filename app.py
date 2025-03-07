@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.express as px
-import numpy as np
 import datetime
 from prophet import Prophet
 import plotly.graph_objects as go
@@ -16,6 +15,16 @@ st.markdown("""
     <h3 style='text-align: center; color: #7f8c8d;'>📡 Real-Time Weather, AI Forecasts & Advanced Analysis</h3>
     <hr>
 """, unsafe_allow_html=True)
+
+# ---- THEME TOGGLE ----
+theme = st.sidebar.radio("🌗 Theme", ["Light Mode", "Dark Mode"])
+if theme == "Dark Mode":
+    st.markdown("""
+        <style>
+            body { background-color: #1E1E1E; color: white; }
+            .stApp { background-color: #1E1E1E; }
+        </style>
+    """, unsafe_allow_html=True)
 
 # ---- WEATHER API CONFIG ----
 try:
@@ -34,7 +43,7 @@ def get_live_weather(city):
 
 # ---- TABS ----
 tabs = st.tabs([
-    "🌦 Live Weather", "📈 AI Forecasts", "🔮 Trends", "📊 Climate Score", "⚠️ Extreme Weather", "📜 Historical Data"
+    "🌦 Live Weather", "📈 AI Forecasts", "🔮 Trends", "📊 Climate Score", "⚠️ Extreme Weather"
 ])
 
 # ---- TAB 1: LIVE WEATHER ----
@@ -42,6 +51,7 @@ with tabs[0]:
     st.subheader("🌦 Live Weather")
     cities = st.text_input("Enter Cities (comma-separated)", "New York, London, Tokyo")
     city_list = [city.strip() for city in cities.split(",")]
+
     if st.button("🔍 Get Live Weather"):
         for city in city_list:
             weather = get_live_weather(city)
@@ -57,18 +67,23 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("📈 AI Climate Forecasts")
     uploaded_file = st.file_uploader("Upload Climate CSV File", type=["csv"])
+
     if uploaded_file is not None:
         try:
             df = pd.read_csv(uploaded_file)
+            
             if df.empty:
                 st.error("⚠️ Uploaded CSV is empty. Please upload a valid file.")
-            elif "Years" in df.columns and "Temperature" in df.columns:
+            elif {"Years", "Month", "Day", "Temperature"}.issubset(df.columns):
                 df["ds"] = pd.to_datetime(df[["Years", "Month", "Day"]])
                 df = df[["ds", "Temperature"]].rename(columns={"Temperature": "y"})
+                
                 model = Prophet()
                 model.fit(df)
+                
                 future = model.make_future_dataframe(periods=30)
                 forecast = model.predict(future)
+                
                 fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends")
                 st.plotly_chart(fig)
             else:
@@ -81,40 +96,49 @@ with tabs[1]:
 # ---- TAB 3: INTERACTIVE TRENDS ----
 with tabs[2]:
     st.subheader("🔮 Interactive Climate Trends")
+
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
-        df["ds"] = pd.to_datetime(df[["Years", "Month", "Day"]])
-        df = df[["ds", "Temperature"]].rename(columns={"Temperature": "y"})
-        fig = px.scatter(df, x="ds", y="y", title="Temperature Trends Over Time")
-        st.plotly_chart(fig)
-        fig2 = px.histogram(df, x="y", title="Temperature Distribution")
-        st.plotly_chart(fig2)
+        
+        if {"Years", "Month", "Day", "Temperature"}.issubset(df.columns):
+            df["ds"] = pd.to_datetime(df[["Years", "Month", "Day"]])
+            df = df[["ds", "Temperature"]].rename(columns={"Temperature": "y"})
+
+            fig = px.scatter(df, x="ds", y="y", title="Temperature Trends Over Time")
+            st.plotly_chart(fig)
+
+            fig2 = px.histogram(df, x="y", title="Temperature Distribution")
+            st.plotly_chart(fig2)
+        else:
+            st.error("⚠️ Invalid CSV format.")
 
 # ---- TAB 4: CLIMATE SCORE ----
 with tabs[3]:
     st.subheader("📊 Climate Impact Score")
+
     if uploaded_file:
         df["climate_score"] = (df["y"] - df["y"].min()) / (df["y"].max() - df["y"].min()) * 100
+
         fig = px.line(df, x="ds", y="climate_score", title="Climate Impact Score")
         st.plotly_chart(fig)
 
 # ---- TAB 5: EXTREME WEATHER ----
 with tabs[4]:
     st.subheader("⚠️ Extreme Weather Alerts")
+
     if uploaded_file:
         threshold = st.slider("Set Temperature Alert Threshold", int(df["y"].min()), int(df["y"].max()), 35)
         alerts = df[df["y"] > threshold]
+
         st.write("### 🔥 Heatwave Alerts", alerts)
+
         fig = px.line(df, x="ds", y="y", title="Extreme Temperature Trends", markers=True)
-        fig.add_trace(go.Scatter(x=alerts["ds"], y=alerts["y"], mode="markers", marker=dict(color="red", size=10), name="Extreme Heat"))
+        fig.add_trace(go.Scatter(
+            x=alerts["ds"], y=alerts["y"], 
+            mode="markers", marker=dict(color="red", size=10), name="Extreme Heat"
+        ))
         st.plotly_chart(fig)
 
-# ---- TAB 6: HISTORICAL DATA ----
-with tabs[5]:
-    st.subheader("📜 Historical Climate Data")
-    if uploaded_file:
-        st.write("### Climate Data Table")
-        st.dataframe(df)
-        yearly_avg = df.groupby(df["ds"].dt.year).mean().reset_index()
-        fig = px.line(yearly_avg, x="ds", y="y", title="Yearly Average Temperature")
-        st.plotly_chart(fig)
+# ---- FOOTER ----
+st.markdown("<hr>", unsafe_allow_html=True)
+st.markdown("🚀 **Developed by AI Climate Team | Powered by WeatherStack & Streamlit**", unsafe_allow_html=True)
