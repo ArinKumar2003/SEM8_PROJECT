@@ -9,3 +9,4 @@ scikit-learn
 seaborn
 prophet
 streamlit_echarts 
+statsmodels
