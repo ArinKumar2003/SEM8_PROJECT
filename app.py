@@ -3,7 +3,6 @@ import requests
 import pandas as pd
 import plotly.express as px
 import numpy as np
-import datetime
 from prophet import Prophet
 import plotly.graph_objects as go
 
@@ -17,6 +16,7 @@ if theme == "Dark Mode":
         <style>
             body, .stApp { background-color: #1E1E1E; color: white; }
             hr { border-color: white; }
+            .sidebar .sidebar-content { background-color: #2C2F33; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -30,6 +30,7 @@ st.markdown("""
 # ---- WEATHER API CONFIG ----
 API_KEY = st.secrets.get("WEATHERSTACK_API_KEY")
 
+@st.cache_data
 def get_live_weather(city):
     """Fetch real-time weather data."""
     if not API_KEY:
@@ -38,37 +39,37 @@ def get_live_weather(city):
     response = requests.get(url)
     return response.json().get("current")
 
-# ---- TABS ----
-tabs = st.tabs(["🌦 Live Weather", "📈 AI Forecasts", "🔮 Trends", "📊 Climate Score", "⚠️ Extreme Weather", "🛰️ Satellite View"])
-
 # ---- FILE UPLOAD ----
 uploaded_file = st.sidebar.file_uploader("📂 Upload Climate CSV", type=["csv"])
 df = None
 
-if uploaded_file:
+@st.cache_data
+def load_data(file):
     try:
-        df = pd.read_csv(uploaded_file)
-        if df.empty:
-            st.sidebar.error("⚠️ The uploaded CSV is empty.")
-            df = None
-        elif not all(col in df.columns for col in ["Years", "Temperature"]):
-            st.sidebar.error("⚠️ Invalid CSV format. Required: Years, Temperature.")
-            df = None
+        data = pd.read_csv(file)
+        if data.empty:
+            return None, "⚠️ Uploaded file is empty."
+        if not all(col in data.columns for col in ["Years", "Temperature"]):
+            return None, "⚠️ Invalid CSV format. Required: Years, Temperature."
+
+        # Handle datetime conversion
+        if all(col in data.columns for col in ["Years", "Month", "Day"]):
+            data["ds"] = pd.to_datetime(data[["Years", "Month", "Day"]])
         else:
-            # Ensure proper datetime format
-            if all(col in df.columns for col in ["Years", "Month", "Day"]):
-                df["ds"] = pd.to_datetime(df[["Years", "Month", "Day"]])
-            else:
-                df["ds"] = pd.to_datetime(df["Years"], format="%Y")
+            data["ds"] = pd.to_datetime(data["Years"], format="%Y")
 
-            df = df[["ds", "Temperature"]].rename(columns={"Temperature": "y"})
-
-    except pd.errors.EmptyDataError:
-        st.sidebar.error("⚠️ Uploaded file is empty or corrupted.")
-        df = None
+        data = data[["ds", "Temperature"]].rename(columns={"Temperature": "y"})
+        return data, None
     except Exception as e:
-        st.sidebar.error(f"❌ Error: {str(e)}")
-        df = None
+        return None, f"❌ Error: {str(e)}"
+
+if uploaded_file:
+    df, error_message = load_data(uploaded_file)
+    if error_message:
+        st.sidebar.error(error_message)
+
+# ---- TABS ----
+tabs = st.tabs(["🌦 Live Weather", "📈 AI Forecasts", "🔮 Trends", "📊 Climate Score", "⚠️ Extreme Weather", "🛰️ Satellite View"])
 
 # ---- TAB 1: LIVE WEATHER ----
 with tabs[0]:
@@ -91,14 +92,18 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("📈 AI Climate Forecasts")
 
-    if df is not None and len(df) > 1:  # Ensure enough data for training
-        model = Prophet()
-        model.fit(df)
-        future = model.make_future_dataframe(periods=30)
-        forecast = model.predict(future)
+    if df is not None and len(df) > 2:
+        with st.spinner("🔄 Training AI Model..."):
+            model = Prophet()
+            model.fit(df)
+            future = model.make_future_dataframe(periods=30)
+            forecast = model.predict(future)
 
         fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends")
+        fig.add_trace(go.Scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot", color="gray")))
+        fig.add_trace(go.Scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot", color="gray")))
         st.plotly_chart(fig)
+
     elif df is not None:
         st.error("⚠️ Not enough data to train AI model.")
 
@@ -106,10 +111,10 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("🔮 Interactive Climate Trends")
     if df is not None:
-        fig1 = px.scatter(df, x="ds", y="y", title="Temperature Trends Over Time")
+        fig1 = px.scatter(df, x="ds", y="y", title="Temperature Trends Over Time", trendline="lowess")
         st.plotly_chart(fig1)
-        
-        fig2 = px.histogram(df, x="y", title="Temperature Distribution")
+
+        fig2 = px.histogram(df, x="y", title="Temperature Distribution", nbins=20)
         st.plotly_chart(fig2)
 
 # ---- TAB 4: CLIMATE SCORE ----
@@ -135,4 +140,5 @@ with tabs[4]:
 # ---- TAB 6: SATELLITE VIEW ----
 with tabs[5]:
     st.subheader("🛰️ Live Climate Satellite View")
+    st.markdown("🚀 Integrate with OpenWeatherMap's Satellite API or Google Maps.")
     st.image("https://earthobservatory.nasa.gov/blogs/earthmatters/wp-content/uploads/sites/9/2019/05/earthmap.png")
