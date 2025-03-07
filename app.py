@@ -5,6 +5,7 @@ import plotly.express as px
 import numpy as np
 from prophet import Prophet
 import plotly.graph_objects as go
+import datetime
 
 # ---- STREAMLIT CONFIG ----
 st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
@@ -20,14 +21,7 @@ if theme == "Dark Mode":
         </style>
     """, unsafe_allow_html=True)
 
-# ---- DASHBOARD HEADER ----
-st.markdown("""
-    <h1 style='text-align: center; color: #2c3e50;'>🌍 AI Climate Dashboard</h1>
-    <h3 style='text-align: center; color: #7f8c8d;'>📡 Real-Time Weather, AI Forecasts & Advanced Analysis</h3>
-    <hr>
-""", unsafe_allow_html=True)
-
-# ---- WEATHER API CONFIG ----
+# ---- API CONFIG ----
 API_KEY = st.secrets.get("WEATHERSTACK_API_KEY")
 
 @st.cache_data
@@ -38,6 +32,13 @@ def get_live_weather(city):
     url = f"http://api.weatherstack.com/current?access_key={API_KEY}&query={city}"
     response = requests.get(url)
     return response.json().get("current")
+
+@st.cache_data
+def get_satellite_image(city):
+    """Fetch satellite weather image (placeholder if API unavailable)."""
+    if not API_KEY:
+        return "https://earthobservatory.nasa.gov/blogs/earthmatters/wp-content/uploads/sites/9/2019/05/earthmap.png"
+    return f"http://api.weatherstack.com/satellite?access_key={API_KEY}&query={city}&layer=infrared"
 
 # ---- FILE UPLOAD ----
 uploaded_file = st.sidebar.file_uploader("📂 Upload Climate CSV", type=["csv"])
@@ -69,7 +70,10 @@ if uploaded_file:
         st.sidebar.error(error_message)
 
 # ---- TABS ----
-tabs = st.tabs(["🌦 Live Weather", "📈 AI Forecasts", "🔮 Trends", "📊 Climate Score", "⚠️ Extreme Weather", "🛰️ Satellite View"])
+tabs = st.tabs([
+    "🌦 Live Weather", "📈 AI Forecasts", "🔮 Trends", "📊 Climate Score",
+    "⚠️ Extreme Weather", "🛰️ Satellite View", "🌍 Air Quality", "🌱 Carbon Footprint", "📰 Climate News"
+])
 
 # ---- TAB 1: LIVE WEATHER ----
 with tabs[0]:
@@ -91,7 +95,6 @@ with tabs[0]:
 # ---- TAB 2: AI FORECASTS ----
 with tabs[1]:
     st.subheader("📈 AI Climate Forecasts")
-
     if df is not None and len(df) > 2:
         with st.spinner("🔄 Training AI Model..."):
             model = Prophet()
@@ -100,10 +103,7 @@ with tabs[1]:
             forecast = model.predict(future)
 
         fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends")
-        fig.add_trace(go.Scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot", color="gray")))
-        fig.add_trace(go.Scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot", color="gray")))
         st.plotly_chart(fig)
-
     elif df is not None:
         st.error("⚠️ Not enough data to train AI model.")
 
@@ -113,9 +113,6 @@ with tabs[2]:
     if df is not None:
         fig1 = px.scatter(df, x="ds", y="y", title="Temperature Trends Over Time", trendline="lowess")
         st.plotly_chart(fig1)
-
-        fig2 = px.histogram(df, x="y", title="Temperature Distribution", nbins=20)
-        st.plotly_chart(fig2)
 
 # ---- TAB 4: CLIMATE SCORE ----
 with tabs[3]:
@@ -131,14 +128,31 @@ with tabs[4]:
     if df is not None:
         threshold = st.slider("Set Temperature Alert Threshold", int(df["y"].min()), int(df["y"].max()), 35)
         alerts = df[df["y"] > threshold]
-
         st.write("### 🔥 Heatwave Alerts", alerts)
-        fig = px.line(df, x="ds", y="y", title="Extreme Temperature Trends", markers=True)
-        fig.add_trace(go.Scatter(x=alerts["ds"], y=alerts["y"], mode="markers", marker=dict(color="red", size=10), name="Extreme Heat"))
-        st.plotly_chart(fig)
 
 # ---- TAB 6: SATELLITE VIEW ----
 with tabs[5]:
     st.subheader("🛰️ Live Climate Satellite View")
-    st.markdown("🚀 Integrate with OpenWeatherMap's Satellite API or Google Maps.")
-    st.image("https://earthobservatory.nasa.gov/blogs/earthmatters/wp-content/uploads/sites/9/2019/05/earthmap.png")
+    city = st.text_input("Enter City for Satellite View", "New York")
+    if st.button("🛰️ Get Satellite View"):
+        satellite_url = get_satellite_image(city)
+        st.image(satellite_url, caption=f"Satellite View of {city}")
+
+# ---- TAB 7: AIR QUALITY ----
+with tabs[6]:
+    st.subheader("🌍 Air Quality Index (AQI)")
+    st.write("🚀 Integrate with OpenWeather API for real-time AQI data.")
+    st.image("https://www.iqair.com/assets/img/aqi-us-en.png")
+
+# ---- TAB 8: CARBON FOOTPRINT ----
+with tabs[7]:
+    st.subheader("🌱 Carbon Footprint Tracker")
+    st.write("⚡ Estimate your personal carbon footprint based on travel, energy use, and consumption.")
+    st.image("https://upload.wikimedia.org/wikipedia/commons/5/5f/Carbon_Footprint.png")
+
+# ---- TAB 9: CLIMATE NEWS ----
+with tabs[8]:
+    st.subheader("📰 Latest Climate News")
+    st.write("🌎 Stay updated with real-time climate news from global sources.")
+    st.image("https://www.un.org/sites/un2.un.org/files/2021/08/ipcc_sixth_assessment_report.jpg")
+
