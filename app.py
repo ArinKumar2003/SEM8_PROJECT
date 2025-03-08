@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.express as px
-import numpy as np
 import datetime
 from prophet import Prophet
 import plotly.graph_objects as go
@@ -10,15 +9,28 @@ import plotly.graph_objects as go
 # ---- STREAMLIT CONFIG ----
 st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
 
-# ---- THEME TOGGLE ----
-theme = st.sidebar.radio("🌗 Theme", ["Light Mode", "Dark Mode"])
-if theme == "Dark Mode":
-    st.markdown("""
-        <style>
-            body, .stApp { background-color: #1E1E1E; color: white; }
-            hr { border-color: white; }
-        </style>
-    """, unsafe_allow_html=True)
+# ---- WEATHER API CONFIG ----
+API_KEY = st.secrets.get("WEATHERAPI_KEY")  # Add your API key in Streamlit secrets
+
+def get_live_weather(city):
+    """Fetch real-time weather data from WeatherAPI.com."""
+    if not API_KEY:
+        st.error("❌ API Key is missing! Please check your Streamlit secrets.")
+        return None
+
+    url = f"http://api.weatherapi.com/v1/current.json?key={API_KEY}&q={city}&aqi=no"
+    response = requests.get(url)
+
+    if response.status_code != 200:
+        st.error(f"❌ API Error: {response.status_code}")
+        return None
+
+    data = response.json()
+    if "error" in data:
+        st.error(f"⚠️ {data['error']['message']}")
+        return None
+
+    return data["current"]
 
 # ---- DASHBOARD HEADER ----
 st.markdown("""
@@ -27,21 +39,7 @@ st.markdown("""
     <hr>
 """, unsafe_allow_html=True)
 
-# ---- WEATHER API CONFIG ----
-API_KEY = st.secrets.get("WEATHERSTACK_API_KEY")
-
-def get_live_weather(city):
-    """Fetch real-time weather data."""
-    if not API_KEY:
-        return None
-    url = f"http://api.weatherstack.com/current?access_key={API_KEY}&query={city}"
-    response = requests.get(url)
-    return response.json().get("current")
-
-# ---- TABS ----
-tabs = st.tabs(["🌦 Live Weather", "📈 AI Forecasts", "🔮 Trends", "📊 Climate Score", "⚠️ Extreme Weather", "🛰️ Satellite View"])
-
-# ---- FILE UPLOAD ----
+# ---- SIDEBAR FILE UPLOAD ----
 uploaded_file = st.sidebar.file_uploader("📂 Upload Climate CSV", type=["csv"])
 df = None
 
@@ -70,6 +68,9 @@ if uploaded_file:
         st.sidebar.error(f"❌ Error: {str(e)}")
         df = None
 
+# ---- TABS ----
+tabs = st.tabs(["🌦 Live Weather", "📈 AI Forecasts", "🔮 Trends", "📊 Climate Score", "⚠️ Extreme Weather"])
+
 # ---- TAB 1: LIVE WEATHER ----
 with tabs[0]:
     st.subheader("🌦 Live Weather")
@@ -81,9 +82,9 @@ with tabs[0]:
             weather = get_live_weather(city)
             if weather:
                 st.write(f"### {city}")
-                st.metric("Temperature", f"{weather['temperature']}°C")
-                st.write(f"**☁️ {weather['weather_descriptions'][0]}**")
-                st.write(f"💧 Humidity: {weather['humidity']}%  |  🌬 Wind: {weather['wind_speed']} km/h")
+                st.metric("Temperature", f"{weather['temp_c']}°C")
+                st.write(f"**☁️ {weather['condition']['text']}**")
+                st.write(f"💧 Humidity: {weather['humidity']}%  |  🌬 Wind: {weather['wind_kph']} km/h")
             else:
                 st.error(f"❌ No data for {city}")
 
@@ -132,7 +133,6 @@ with tabs[4]:
         fig.add_trace(go.Scatter(x=alerts["ds"], y=alerts["y"], mode="markers", marker=dict(color="red", size=10), name="Extreme Heat"))
         st.plotly_chart(fig)
 
-# ---- TAB 6: SATELLITE VIEW ----
-with tabs[5]:
-    st.subheader("🛰️ Live Climate Satellite View")
-    st.image("https://earthobservatory.nasa.gov/blogs/earthmatters/wp-content/uploads/sites/9/2019/05/earthmap.png")
+# ---- FOOTER ----
+st.markdown("<hr>", unsafe_allow_html=True)
+st.markdown("🚀 **Developed by AI Climate Team | Powered by WeatherAPI & Streamlit**", unsafe_allow_html=True)
