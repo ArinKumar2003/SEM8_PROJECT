@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
 
 # ---- WEATHER API CONFIG ----
-API_KEY = st.secrets.get("WEATHERAPI_KEY")  # Add your API key in Streamlit secrets
+API_KEY = st.secrets["WEATHERAPI_KEY"] if "WEATHERAPI_KEY" in st.secrets else None  # Add your API key in Streamlit secrets
 
 def get_live_weather(city):
     """Fetch real-time weather data from WeatherAPI.com."""
@@ -19,21 +19,17 @@ def get_live_weather(city):
         return None
     
     url = f"http://api.weatherapi.com/v1/current.json?key={API_KEY}&q={city}&aqi=no"
-    response = requests.get(url)
-    
-    if response.status_code != 200:
-        st.error(f"❌ API Error: {response.status_code}")
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        if "error" in data:
+            st.error(f"⚠️ {data['error']['message']}")
+            return None
+        return {"ds": datetime.datetime.now(), "y": data["current"]["temp_c"]}  # Temperature in Celsius
+    except requests.exceptions.RequestException as e:
+        st.error(f"❌ API Request failed: {e}")
         return None
-    
-    data = response.json()
-    if "error" in data:
-        st.error(f"⚠️ {data['error']['message']}")
-        return None
-    
-    return {
-        "ds": datetime.datetime.now(),
-        "y": data["current"]["temp_c"]  # Temperature in Celsius
-    }
 
 # ---- SIDEBAR FILE UPLOAD ----
 uploaded_file = st.sidebar.file_uploader("📂 Upload Climate CSV", type=["csv"])
@@ -69,13 +65,15 @@ if st.sidebar.button("Fetch Live Weather"):
 # ---- AI FORECASTS ----
 st.header("📈 AI Climate Forecasts with Live Data")
 if df is not None and len(df) > 1:
-    model = Prophet()
-    model.fit(df)
-    future = model.make_future_dataframe(periods=365)  # Predict for one year
-    forecast = model.predict(future)
-
-    fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends (Including Live Data)")
-    st.plotly_chart(fig)
+    try:
+        model = Prophet()
+        model.fit(df)
+        future = model.make_future_dataframe(periods=365)  # Predict for one year
+        forecast = model.predict(future)
+        fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends (Including Live Data)")
+        st.plotly_chart(fig)
+    except Exception as e:
+        st.error(f"❌ Forecasting error: {e}")
 elif df is not None:
     st.error("⚠️ Not enough data to train AI model.")
 
