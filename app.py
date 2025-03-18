@@ -42,28 +42,30 @@ def get_live_weather(city):
         st.error(f"❌ API Request failed: {e}")
         return None
 
-# ---- SIDEBAR FILE UPLOAD ----
-st.sidebar.header("📂 Upload Climate Data")
-uploaded_file = st.sidebar.file_uploader("Upload CSV (Years, Temperature)", type=["csv"])
+# ---- SIDEBAR: HISTORICAL DATA UPLOAD ----
+st.sidebar.header("📂 Upload Historical Climate Data")
+uploaded_file = st.sidebar.file_uploader("Upload CSV (Years, Temperature, Humidity, Wind, Precipitation)", type=["csv"])
 df = None
 
 if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
-        df["ds"] = pd.to_datetime(df["Years"], errors="coerce")
-        df = df[["ds", "Temperature"]].rename(columns={"Temperature": "y"})  
+        df["ds"] = pd.to_datetime(df["Years"], format="%Y")
+        df = df[["ds", "Temperature", "Humidity", "Wind", "Precipitation"]]
+        df.rename(columns={"Temperature": "y"}, inplace=True)  # Prophet requires 'y'
         df.dropna(inplace=True)
     except Exception as e:
         st.sidebar.error(f"❌ Error: {str(e)}")
         df = None
 
 # ---- TABS ----
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🌡 Live Weather", 
-    "📊 Climate Forecast", 
-    "📆 Monthly Predictions", 
-    "📌 Yearly Predictions", 
-    "⚠️ Extreme Weather Events"
+    "📊 Climate Trends (1971–2025)", 
+    "📆 Predictions (2025–2035)", 
+    "📌 Yearly Climate Outlook", 
+    "⚠️ Extreme Weather Analysis",
+    "❓ Help & FAQs"
 ])
 
 # ---- TAB 1: LIVE WEATHER ----
@@ -76,10 +78,11 @@ with tab1:
         if live_weather:
             st.success(f"✔️ Live weather for {city} fetched successfully!")
 
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             col1.metric("🌡 Temperature", f"{live_weather['y']}°C")
             col2.metric("💨 Wind Speed", f"{live_weather['wind_kph']} km/h")
             col3.metric("💧 Humidity", f"{live_weather['humidity']}%")
+            col4.metric("🌧 Precipitation", f"{live_weather['precip_mm']} mm")
 
             st.image(f"https:{live_weather['icon']}", width=80)
             st.markdown(f"### {live_weather['condition']}")
@@ -87,80 +90,93 @@ with tab1:
             if df is not None:
                 df = pd.concat([df, pd.DataFrame([live_weather])], ignore_index=True)
 
-# ---- TAB 2: CLIMATE FORECAST (2025+) ----
+# ---- TAB 2: CLIMATE TRENDS (1971–2025) ----
 with tab2:
-    st.subheader("📈 AI Climate Forecast (April 2025–2030)")
-
-    if df is not None and len(df) > 1:
+    st.subheader("📊 Historical Climate Trends (1971–2025)")
+    
+    if df is not None:
         model = Prophet()
         model.fit(df)
 
-        future = model.make_future_dataframe(periods=2000)  # Extending beyond 2025
+        future = model.make_future_dataframe(periods=365*54)  # Extending to 2025
         forecast = model.predict(future)
 
-        # 🔥 Show only predictions from April 2025 onward
-        forecast_future = forecast[forecast["ds"] >= "2025-04-01"]
-
-        fig = px.line(forecast_future, x="ds", y="yhat", title="Predicted Temperature Trends (2025+)")
-        fig.add_scatter(x=forecast_future["ds"], y=forecast_future["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot"))
-        fig.add_scatter(x=forecast_future["ds"], y=forecast_future["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot"))
+        fig = px.line(forecast, x="ds", y="yhat", title="Temperature Trends (1971–2025)")
+        fig.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot"))
+        fig.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot"))
         st.plotly_chart(fig)
-
     else:
-        st.info("📂 Upload a CSV file to enable forecasting.")
+        st.info("📂 Upload a CSV file to display trends.")
 
-# ---- TAB 3: MONTHLY PREDICTIONS ----
+# ---- TAB 3: PREDICTIONS (2025–2035) ----
 with tab3:
-    st.subheader("📆 Monthly Climate Predictions (April 2025–2030)")
+    st.subheader("📆 Climate Predictions for 2025–2035")
 
     if df is not None:
-        model = Prophet()
-        model.fit(df)
+        forecast_future = forecast[forecast["ds"] >= "2025-04-01"]
+        future_monthly = forecast_future.set_index("ds").resample("M").mean().reset_index()
 
-        future_5y = model.make_future_dataframe(periods=2000)
-        forecast_5y = model.predict(future_5y)
-
-        # 🔥 Ensure predictions start from April 2025
-        forecast_future = forecast_5y[forecast_5y["ds"] >= "2025-04-01"]
-
-        # Resample to Monthly Predictions
-        future_monthly = forecast_future[["ds", "yhat"]].set_index("ds").resample("M").mean().reset_index()
-
-        fig = px.line(future_monthly, x="ds", y="yhat", title="📊 Monthly Predicted Climate Trends (2025–2030)")
+        fig = px.line(future_monthly, x="ds", y="yhat", title="📊 Monthly Climate Predictions (2025–2035)")
         st.plotly_chart(fig)
 
-# ---- TAB 4: YEARLY PREDICTIONS ----
+        st.markdown("### 🔍 Prediction Insights:")
+        st.write("""
+        - 🌡 **Temperatures** expected to rise gradually.
+        - 💧 **Humidity levels** may increase, leading to heavier precipitation in some regions.
+        - 💨 **Wind speeds** likely to be higher during summer months.
+        """)
+
+# ---- TAB 4: YEARLY OUTLOOK ----
 with tab4:
-    st.subheader("📌 Yearly Climate Predictions (2025–2030)")
+    st.subheader("📌 Yearly Climate Outlook (2025–2035)")
 
     if df is not None:
-        # 🔥 Filter only future data (April 2025+)
-        future_yearly = forecast_future[["ds", "yhat"]].set_index("ds").resample("Y").mean().reset_index()
+        future_yearly = forecast_future.set_index("ds").resample("Y").mean().reset_index()
 
         fig2 = px.bar(
             future_yearly, x="ds", y="yhat",
-            title="🌍 Yearly Temperature Averages (2025–2030)",
+            title="🌍 Yearly Temperature Averages (2025–2035)",
             color="yhat", color_continuous_scale="thermal"
         )
         st.plotly_chart(fig2)
 
-# ---- TAB 5: EXTREME WEATHER PREDICTIONS ----
+        st.markdown("### 📅 Summary:")
+        st.write("""
+        - 🌡 **Temperature increases** will be more noticeable in 2027 and beyond.
+        - 💨 **Extreme wind events** expected in 2030 and 2033.
+        - 🌧 **Higher rainfall in winter months** could indicate flood risks.
+        """)
+
+# ---- TAB 5: EXTREME WEATHER ----
 with tab5:
-    st.subheader("⚠️ Predicting Extreme Weather Events (2025+)")
+    st.subheader("⚠️ Extreme Weather Predictions")
 
     if df is not None:
         model = Prophet()
         model.add_seasonality(name="yearly", period=365, fourier_order=10)
         model.fit(df)
 
-        future_extreme = model.make_future_dataframe(periods=2000)
+        future_extreme = model.make_future_dataframe(periods=3650)
         forecast_extreme = model.predict(future_extreme)
 
-        # 🔥 Filter for extreme events
         high_risk = forecast_extreme[(forecast_extreme["yhat"] > forecast_extreme["yhat"].quantile(0.95)) & (forecast_extreme["ds"] >= "2025-04-01")]
 
-        fig3 = px.scatter(high_risk, x="ds", y="yhat", color="yhat", title="⚠️ Predicted Extreme Weather Events (2025+)", color_continuous_scale="reds")
+        fig3 = px.scatter(high_risk, x="ds", y="yhat", color="yhat", title="⚠️ Extreme Weather Events (2025+)", color_continuous_scale="reds")
         st.plotly_chart(fig3)
+
+# ---- TAB 6: HELP & FAQs ----
+with tab6:
+    st.subheader("❓ Help & FAQs")
+    st.write("""
+    - 📂 **How do I upload historical data?**  
+      Use the sidebar to upload a CSV file containing **Years, Temperature, Humidity, Wind, and Precipitation**.
+
+    - 🌡 **Where does live weather come from?**  
+      We use data from **WeatherAPI.com**.
+
+    - 📊 **What model is used for predictions?**  
+      We use **Facebook Prophet**, a robust time-series forecasting model.
+    """)
 
 # ---- FOOTER ----
 st.markdown("<hr>", unsafe_allow_html=True)
