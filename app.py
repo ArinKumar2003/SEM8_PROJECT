@@ -119,7 +119,7 @@ with tab2:
             model = Prophet()
             model.fit(df)
 
-            future = model.make_future_dataframe(periods=730)  # Predict next 2 years
+            future = model.make_future_dataframe(periods=1825)  # Predict next 5 years
             forecast = model.predict(future)
 
             # Forecast Visualization
@@ -150,23 +150,38 @@ with tab2:
         st.info("📂 Upload a CSV file with climate data to enable forecasting.")
 
 with tab3:
-    st.subheader("📌 Future Climate Insights")
+    st.subheader("📌 Future Climate Insights (2025–2030)")
     
     if df is not None:
-        future_temp = forecast[["ds", "yhat"]].tail(24)  # Next 24 months
-        st.write("### 🔮 Climate Predictions for Upcoming Months:")
-        for _, row in future_temp.iterrows():
+        # Forecasting for next 5 years (until 2030)
+        future_5y = model.make_future_dataframe(periods=1825)  # 5 years * 365 days
+        forecast_5y = model.predict(future_5y)
+
+        # Filtering only future dates after March 2025
+        future_5y = forecast_5y[forecast_5y["ds"] > "2025-03-01"]
+        future_5y["ds"] = pd.to_datetime(future_5y["ds"])
+
+        # Extract only month-wise forecasts
+        future_monthly = future_5y.resample("M", on="ds").mean().reset_index()
+
+        st.write("### 🔮 Climate Predictions from April 2025 Onwards:")
+
+        for _, row in future_monthly.iterrows():
             temp = round(row["yhat"], 2)
-            date = row["ds"].strftime("%B %Y")
-            if temp > 30:
-                description = "🔥 Hot and Dry Weather Expected"
+            date = row["ds"].strftime("%B %Y")  # Format: "April 2025"
+
+            # AI-based climate condition descriptions
+            if temp > 35:
+                description = "🔥 Extreme Heatwaves Expected – Stay Hydrated!"
+            elif temp > 30:
+                description = "☀️ Hot and Dry Conditions – Expect Warm Evenings"
             elif temp > 20:
-                description = "☀️ Warm and Comfortable Conditions"
+                description = "🌤 Mild and Comfortable Weather – Great for Outdoor Activities"
             elif temp > 10:
-                description = "🌤 Mild and Pleasant Climate"
+                description = "🌦 Slightly Chilly with Possible Rain Showers"
             else:
-                description = "❄️ Cold and Chilly Temperatures"
-            
+                description = "❄️ Cold Climate – Expect Snow or Frost in Some Regions"
+
             st.markdown(f"**{date}**: {temp}°C - {description}")
 
 # ---- FOOTER ----
