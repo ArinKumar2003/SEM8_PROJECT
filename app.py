@@ -12,7 +12,7 @@ from io import BytesIO
 st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
 
 # ---- TITLE ----
-st.title("🌍 AI Climate Dashboard - Live & Historical Forecasts")
+st.title("🌍 AI Climate Dashboard - Live & Historical Forecasts with Descriptions")
 
 # ---- WEATHER API CONFIG ----
 API_KEY = st.secrets.get("WEATHERAPI_KEY")
@@ -57,6 +57,32 @@ def get_live_weather(city):
         st.error(f"❌ API Request failed: {e}")
         return None
 
+# ---- FUNCTION FOR WEATHER DESCRIPTIONS ----
+def generate_weather_description(temp, humidity, co2, condition):
+    """Generates a dynamic human-readable weather description."""
+    description = f"🌡 The current temperature is **{temp}°C**, "
+    
+    if temp > 35:
+        description += "🔥 it's extremely hot. Stay hydrated! "
+    elif temp < 5:
+        description += "❄️ it's very cold. Dress warmly! "
+    
+    description += f"💧 The humidity level is **{humidity}%**, "
+
+    if humidity > 80:
+        description += "which is quite high, leading to a muggy feeling. "
+    elif humidity < 30:
+        description += "making the air dry. Use a moisturizer! "
+
+    description += f"🌎 The estimated CO₂ level is **{co2} ppm**. "
+    
+    if co2 > 450:
+        description += "🚨 This is above normal levels, indicating air pollution concerns. "
+
+    description += f"☁️ The weather condition is **{condition}**."
+    
+    return description
+
 # ---- SIDEBAR FILE UPLOAD ----
 st.sidebar.subheader("📂 Upload Climate CSV (1971+)")
 uploaded_file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
@@ -78,9 +104,6 @@ if uploaded_file:
         st.sidebar.error(f"❌ Error: {str(e)}")
         df = None
 
-# ---- Initialize Variables ----
-live_weather = None  # ✅ Ensure `live_weather` is always initialized
-
 # ---- TAB LAYOUT ----
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Live Weather", "📜 Historical Data (1971)", "🔮 AI Predictions (2025+)", "📈 Monthly & Yearly Forecasts", "🆘 Help"])
 
@@ -95,9 +118,14 @@ with tab1:
             st.success(f"✔️ Live weather for {city} fetched successfully!")
 
             if live_weather["Icon"]:
-                st.image(live_weather["Icon"], width=50)  # Display image correctly
+                st.image(live_weather["Icon"], width=50)
 
-            st.write(f"**Condition:** {live_weather['Condition']}")
+            st.write(generate_weather_description(
+                live_weather['Temperature'], 
+                live_weather['Humidity'], 
+                live_weather['CO2'], 
+                live_weather['Condition']
+            ))
 
             col1, col2, col3 = st.columns(3)
             col1.metric("🌡 Temperature", f"{live_weather['Temperature']}°C")
@@ -109,30 +137,24 @@ with tab2:
     st.subheader("📜 Historical Climate Data (Since 1971)")
     
     if df is not None:
-        st.write("📅 **Displaying first few rows of historical data:**")
         st.dataframe(df.head())
 
         fig_hist = px.line(df, x="ds", y="Temperature", title="📊 Historical Temperature Trends (1971+)")
         st.plotly_chart(fig_hist)
-    else:
-        st.warning("📌 Upload historical climate data to view insights.")
 
 # ---- TAB 3: PREDICTIVE CLIMATE CONDITIONS (2025+) ----
 with tab3:
     st.subheader("🔮 AI Climate Predictions (2025+)")
 
-    if df is not None and len(df) > 1:
+    if df is not None:
         model = Prophet()
         model.fit(df.rename(columns={"Temperature": "y"}))
 
-        future_5y = model.make_future_dataframe(periods=365 * 5)  # 5 years ahead
+        future_5y = model.make_future_dataframe(periods=365 * 5)
         forecast_5y = model.predict(future_5y)
 
         fig_forecast = px.line(forecast_5y, x="ds", y="yhat", title="🌡 Future Temperature Predictions (2025-2030)")
         st.plotly_chart(fig_forecast)
-
-    else:
-        st.warning("📌 Upload historical data to generate predictions.")
 
 # ---- TAB 4: MONTHLY & YEARLY CLIMATE FORECASTS ----
 with tab4:
@@ -140,35 +162,18 @@ with tab4:
 
     if df is not None:
         future_monthly = forecast_5y.resample("M", on="ds").mean().reset_index()
-        future_yearly = forecast_5y.resample("Y", on="ds").mean().reset_index()
 
-        st.write("📅 **Monthly Predictions:**")
         fig_monthly = px.line(future_monthly, x="ds", y="yhat", title="📊 Monthly Predicted Climate Trends (2025–2030)")
         st.plotly_chart(fig_monthly)
-
-        st.write("📅 **Yearly Predictions:**")
-        fig_yearly = px.line(future_yearly, x="ds", y="yhat", title="📊 Yearly Predicted Climate Trends (2025–2030)")
-        st.plotly_chart(fig_yearly)
-    else:
-        st.warning("📌 Upload historical data to view forecasts.")
 
 # ---- TAB 5: HELP & ALERTS ----
 with tab5:
     st.subheader("🆘 Help & Alerts")
 
     st.markdown("""
-    - **Live Weather Data**: Enter a city and fetch real-time temperature, humidity, and estimated CO₂ levels.
-    - **Historical Data**: Upload historical climate data (1971+) to train AI models.
-    - **Predictions (2025+)**: AI-based climate forecasting using Prophet.
-    - **Extreme Weather Alerts**: Automated alerts for dangerous temperatures.
+    - **Live Weather**: Fetch real-time data with human-readable descriptions.
+    - **Historical Data**: Upload 1971+ climate records.
+    - **Predictions (2025+)**: AI-powered climate forecasting.
+    - **Extreme Weather Alerts**: Automated warnings for dangerous conditions.
     """)
 
-    if live_weather:  # ✅ Check if `live_weather` exists before accessing it
-        if live_weather["Temperature"] > 40:
-            st.error("🚨 Heatwave Alert! High temperatures detected.")
-        elif live_weather["Temperature"] < 0:
-            st.warning("❄️ Cold Weather Alert! Freezing conditions expected.")
-        elif live_weather["CO2"] > 450:
-            st.warning("🌎 High CO₂ Levels Detected! Consider environmental precautions.")
-    else:
-        st.info("ℹ️ Fetch live weather data to enable alerts.")
