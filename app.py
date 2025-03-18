@@ -87,19 +87,19 @@ with tab1:
             if df is not None:
                 df = pd.concat([df, pd.DataFrame([live_weather])], ignore_index=True)
 
-# ---- TAB 2: CLIMATE FORECAST ----
+# ---- TAB 2: CLIMATE FORECAST (2025+) ----
 with tab2:
-    st.subheader("📈 AI Climate Forecast (Including Live Weather Data)")
+    st.subheader("📈 AI Climate Forecast (April 2025–2030)")
 
     if df is not None and len(df) > 1:
         model = Prophet()
         model.fit(df)
 
-        future = model.make_future_dataframe(periods=1825)  
+        future = model.make_future_dataframe(periods=2000)  # Extending beyond 2025
         forecast = model.predict(future)
 
-        # 🔥 Show only predictions from 2025 onward
-        forecast_future = forecast[forecast["ds"] >= "2025-01-01"]
+        # 🔥 Show only predictions from April 2025 onward
+        forecast_future = forecast[forecast["ds"] >= "2025-04-01"]
 
         fig = px.line(forecast_future, x="ds", y="yhat", title="Predicted Temperature Trends (2025+)")
         fig.add_scatter(x=forecast_future["ds"], y=forecast_future["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot"))
@@ -111,17 +111,17 @@ with tab2:
 
 # ---- TAB 3: MONTHLY PREDICTIONS ----
 with tab3:
-    st.subheader("📆 Monthly Climate Predictions (2025–2030)")
+    st.subheader("📆 Monthly Climate Predictions (April 2025–2030)")
 
     if df is not None:
         model = Prophet()
         model.fit(df)
 
-        future_5y = model.make_future_dataframe(periods=1825)
+        future_5y = model.make_future_dataframe(periods=2000)
         forecast_5y = model.predict(future_5y)
 
-        # 🔥 Ensure predictions start from 2025
-        forecast_future = forecast_5y[forecast_5y["ds"] >= "2025-01-01"]
+        # 🔥 Ensure predictions start from April 2025
+        forecast_future = forecast_5y[forecast_5y["ds"] >= "2025-04-01"]
 
         # Resample to Monthly Predictions
         future_monthly = forecast_future[["ds", "yhat"]].set_index("ds").resample("M").mean().reset_index()
@@ -134,7 +134,7 @@ with tab4:
     st.subheader("📌 Yearly Climate Predictions (2025–2030)")
 
     if df is not None:
-        # 🔥 Filter only future data (2025+)
+        # 🔥 Filter only future data (April 2025+)
         future_yearly = forecast_future[["ds", "yhat"]].set_index("ds").resample("Y").mean().reset_index()
 
         fig2 = px.bar(
@@ -146,18 +146,18 @@ with tab4:
 
 # ---- TAB 5: EXTREME WEATHER PREDICTIONS ----
 with tab5:
-    st.subheader("⚠️ Predicting Extreme Weather Events")
+    st.subheader("⚠️ Predicting Extreme Weather Events (2025+)")
 
     if df is not None:
         model = Prophet()
         model.add_seasonality(name="yearly", period=365, fourier_order=10)
         model.fit(df)
 
-        future_extreme = model.make_future_dataframe(periods=1825)
+        future_extreme = model.make_future_dataframe(periods=2000)
         forecast_extreme = model.predict(future_extreme)
 
         # 🔥 Filter for extreme events
-        high_risk = forecast_extreme[(forecast_extreme["yhat"] > forecast_extreme["yhat"].quantile(0.95)) & (forecast_extreme["ds"] >= "2025-01-01")]
+        high_risk = forecast_extreme[(forecast_extreme["yhat"] > forecast_extreme["yhat"].quantile(0.95)) & (forecast_extreme["ds"] >= "2025-04-01")]
 
         fig3 = px.scatter(high_risk, x="ds", y="yhat", color="yhat", title="⚠️ Predicted Extreme Weather Events (2025+)", color_continuous_scale="reds")
         st.plotly_chart(fig3)
