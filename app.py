@@ -168,11 +168,4 @@ with tab5:
         elif live_weather["CO2"] > 450:
             st.warning("🌎 High CO₂ Levels Detected! Consider environmental precautions.")
 
----
-### **🔧 Key Enhancements:**
-✅ **Fixed Live Weather API & CO₂ Display**  
-✅ **Properly Loads Historical Data (1971-Present)**  
-✅ **AI Predictions for 2025+ with Monthly & Yearly Trends**  
-✅ **Interactive Visualizations & Climate Alerts**  
 
-🚀 **Now your dashboard is powerful, interactive, and informative!** 🚀
