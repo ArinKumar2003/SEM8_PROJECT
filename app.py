@@ -123,24 +123,9 @@ with tab2:
             forecast = model.predict(future)
 
             # Forecast Visualization
-            fig = go.Figure()
-
-            # Actual Data
-            fig.add_trace(go.Scatter(x=df["ds"], y=df["y"], mode="markers", name="Actual Data"))
-
-            # Forecasted Trend
-            fig.add_trace(go.Scatter(x=forecast["ds"], y=forecast["yhat"], mode="lines", name="Forecasted Trend"))
-
-            # Confidence Interval
-            fig.add_trace(go.Scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot")))
-            fig.add_trace(go.Scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot")))
-
-            fig.update_layout(
-                title="Predicted Temperature Trends (Including Live Data)",
-                xaxis_title="Year",
-                yaxis_title="Temperature (°C)",
-                hovermode="x unified"
-            )
+            fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends (Including Live Data)")
+            fig.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound")
+            fig.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound")
 
             st.plotly_chart(fig)
 
@@ -160,9 +145,11 @@ with tab3:
         # Filtering only future dates after March 2025
         future_5y = forecast_5y[forecast_5y["ds"] > "2025-03-01"]
         future_5y["ds"] = pd.to_datetime(future_5y["ds"])
+        future_5y.set_index("ds", inplace=True)
 
-        # Extract only month-wise forecasts
-        future_monthly = future_5y.resample("M", on="ds").mean().reset_index()
+        # Select only numeric columns for resampling
+        numeric_cols = future_5y.select_dtypes(include=["number"]).columns
+        future_monthly = future_5y[numeric_cols].resample("M").mean().reset_index()
 
         st.write("### 🔮 Climate Predictions from April 2025 Onwards:")
 
@@ -171,16 +158,7 @@ with tab3:
             date = row["ds"].strftime("%B %Y")  # Format: "April 2025"
 
             # AI-based climate condition descriptions
-            if temp > 35:
-                description = "🔥 Extreme Heatwaves Expected – Stay Hydrated!"
-            elif temp > 30:
-                description = "☀️ Hot and Dry Conditions – Expect Warm Evenings"
-            elif temp > 20:
-                description = "🌤 Mild and Comfortable Weather – Great for Outdoor Activities"
-            elif temp > 10:
-                description = "🌦 Slightly Chilly with Possible Rain Showers"
-            else:
-                description = "❄️ Cold Climate – Expect Snow or Frost in Some Regions"
+            description = "🌡 Moderate Climate" if 10 <= temp <= 30 else "🔥 Extreme Heat" if temp > 30 else "❄️ Cold Weather"
 
             st.markdown(f"**{date}**: {temp}°C - {description}")
 
