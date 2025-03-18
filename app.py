@@ -30,7 +30,7 @@ def get_live_weather(city):
 
         return {
             "ds": datetime.datetime.now(),
-            "y": float(data["current"]["temp_c"]),  # Temperature in Celsius
+            "y": float(data["current"]["temp_c"]),
             "humidity": data["current"]["humidity"],
             "wind_kph": data["current"]["wind_kph"],
             "precip_mm": data["current"]["precip_mm"],
@@ -53,7 +53,6 @@ if uploaded_file:
         df["ds"] = pd.to_datetime(df["Years"], errors="coerce")
         df = df[["ds", "Temperature"]].rename(columns={"Temperature": "y"})  
         df.dropna(inplace=True)
-
     except Exception as e:
         st.sidebar.error(f"❌ Error: {str(e)}")
         df = None
@@ -77,7 +76,6 @@ with tab1:
         if live_weather:
             st.success(f"✔️ Live weather for {city} fetched successfully!")
 
-            # Display Weather Conditions
             col1, col2, col3 = st.columns(3)
             col1.metric("🌡 Temperature", f"{live_weather['y']}°C")
             col2.metric("💨 Wind Speed", f"{live_weather['wind_kph']} km/h")
@@ -95,18 +93,18 @@ with tab2:
 
     if df is not None and len(df) > 1:
         model = Prophet()
-        model.fit(df, algorithm="Newton")
+        model.fit(df)
 
-        future = model.make_future_dataframe(periods=1825)  # Predict next 5 years
+        future = model.make_future_dataframe(periods=1825)  
         forecast = model.predict(future)
 
-        fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends (With Live Data)")
+        fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends")
         fig.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot"))
         fig.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot"))
         st.plotly_chart(fig)
 
     else:
-        st.info("📂 Upload a CSV file with climate data to enable forecasting.")
+        st.info("📂 Upload a CSV file to enable forecasting.")
 
 # ---- TAB 3: MONTHLY PREDICTIONS ----
 with tab3:
@@ -114,25 +112,34 @@ with tab3:
 
     if df is not None:
         model = Prophet()
-        model.fit(df, algorithm="Newton")
+        model.fit(df)
 
         future_5y = model.make_future_dataframe(periods=1825)
         forecast_5y = model.predict(future_5y)
 
         future_5y["ds"] = pd.to_datetime(future_5y["ds"])
         future_5y.set_index("ds", inplace=True)
-        numeric_cols = future_5y.select_dtypes(include=["number"]).columns
-        future_monthly = future_5y[numeric_cols].resample("M").mean().reset_index()
 
-        fig = px.line(future_monthly, x="ds", y="yhat", title="📊 Monthly Predicted Climate Trends (2025–2030)")
-        st.plotly_chart(fig)
+        # Extract only the yhat column before resampling
+        future_monthly = forecast_5y[["ds", "yhat"]].set_index("ds").resample("M").mean().reset_index()
+
+        # Debugging: Print the available columns
+        st.write("Columns available in future_monthly:", future_monthly.columns)
+
+        # Ensure yhat exists before plotting
+        if "yhat" in future_monthly.columns:
+            fig = px.line(future_monthly, x="ds", y="yhat", title="📊 Monthly Predicted Climate Trends (2025–2030)")
+            st.plotly_chart(fig)
+        else:
+            st.error("⚠️ No 'yhat' column found in forecast data!")
 
 # ---- TAB 4: YEARLY PREDICTIONS ----
 with tab4:
     st.subheader("📌 Yearly Climate Predictions (2025–2030)")
 
     if df is not None:
-        future_yearly = future_5y[numeric_cols].resample("Y").mean().reset_index()
+        future_yearly = forecast_5y[["ds", "yhat"]].set_index("ds").resample("Y").mean().reset_index()
+
         fig2 = px.bar(future_yearly, x="ds", y="yhat", title="🌍 Yearly Temperature Averages (2025–2030)", color="yhat", color_continuous_scale="thermal")
         st.plotly_chart(fig2)
 
@@ -141,16 +148,15 @@ with tab5:
     st.subheader("⚠️ Predicting Extreme Weather Events")
 
     if df is not None:
-        df["seasonality"] = df["ds"].dt.month.apply(lambda x: "Winter" if x in [12,1,2] else "Summer" if x in [6,7,8] else "Other")
         model = Prophet()
         model.add_seasonality(name="yearly", period=365, fourier_order=10)
-        model.fit(df, algorithm="Newton")
+        model.fit(df)
 
         future_extreme = model.make_future_dataframe(periods=1825)
         forecast_extreme = model.predict(future_extreme)
 
         high_risk = forecast_extreme[forecast_extreme["yhat"] > forecast_extreme["yhat"].quantile(0.95)]
-        fig3 = px.scatter(high_risk, x="ds", y="yhat", color="yhat", title="⚠️ Predicted Extreme Weather (Heatwaves & Storms)", color_continuous_scale="reds")
+        fig3 = px.scatter(high_risk, x="ds", y="yhat", color="yhat", title="⚠️ Predicted Extreme Weather Events", color_continuous_scale="reds")
         st.plotly_chart(fig3)
 
 # ---- FOOTER ----
