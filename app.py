@@ -59,8 +59,15 @@ if uploaded_file:
         df = None
 
 # ---- TABS ----
-tab1, tab2, tab3 = st.tabs(["🌡 Live Weather", "📊 Climate Forecast", "📌 Future Climate Predictions"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🌡 Live Weather", 
+    "📊 Climate Forecast", 
+    "📆 Monthly Predictions", 
+    "📌 Yearly Predictions", 
+    "⚠️ Extreme Weather Events"
+])
 
+# ---- TAB 1: LIVE WEATHER ----
 with tab1:
     st.subheader("🌍 Live Weather Dashboard")
     city = st.text_input("Enter City for Live Data", "New York")
@@ -82,13 +89,12 @@ with tab1:
             if df is not None:
                 df = pd.concat([df, pd.DataFrame([live_weather])], ignore_index=True)
 
+# ---- TAB 2: CLIMATE FORECAST ----
 with tab2:
     st.subheader("📈 AI Climate Forecast (Including Live Weather Data)")
 
     if df is not None and len(df) > 1:
         model = Prophet()
-        
-        # ✅ FIXED CMDSTANPY ERROR (Newton's Optimization)
         model.fit(df, algorithm="Newton")
 
         future = model.make_future_dataframe(periods=1825)  # Predict next 5 years
@@ -102,41 +108,50 @@ with tab2:
     else:
         st.info("📂 Upload a CSV file with climate data to enable forecasting.")
 
+# ---- TAB 3: MONTHLY PREDICTIONS ----
 with tab3:
-    st.subheader("📌 Future Climate Predictions (2025–2030)")
+    st.subheader("📆 Monthly Climate Predictions")
 
     if df is not None:
         model = Prophet()
-
-        # Adding Live Weather Data into the Model
-        live_weather = get_live_weather("New York")  # Default city; user can modify
-        if live_weather:
-            df = pd.concat([df, pd.DataFrame([live_weather])], ignore_index=True)
-
-        # ✅ FIXED CMDSTANPY ERROR
         model.fit(df, algorithm="Newton")
 
-        future_5y = model.make_future_dataframe(periods=1825)  
+        future_5y = model.make_future_dataframe(periods=1825)
         forecast_5y = model.predict(future_5y)
-        future_5y = forecast_5y[forecast_5y["ds"] > "2025-03-01"]
 
-        # ---- FIXED ISSUE WITH RESAMPLING ----
         future_5y["ds"] = pd.to_datetime(future_5y["ds"])
         future_5y.set_index("ds", inplace=True)
         numeric_cols = future_5y.select_dtypes(include=["number"]).columns
         future_monthly = future_5y[numeric_cols].resample("M").mean().reset_index()
 
-        # ---- INTERACTIVE VISUALIZATION ----
-        st.write("### 🔮 Climate Predictions from April 2025 Onwards:")
         fig = px.line(future_monthly, x="ds", y="yhat", title="📊 Monthly Predicted Climate Trends (2025–2030)")
-        fig.add_scatter(x=future_monthly["ds"], y=future_monthly["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot"))
-        fig.add_scatter(x=future_monthly["ds"], y=future_monthly["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot"))
         st.plotly_chart(fig)
 
-        # ---- YEARLY SUMMARY CHART ----
+# ---- TAB 4: YEARLY PREDICTIONS ----
+with tab4:
+    st.subheader("📌 Yearly Climate Predictions (2025–2030)")
+
+    if df is not None:
         future_yearly = future_5y[numeric_cols].resample("Y").mean().reset_index()
         fig2 = px.bar(future_yearly, x="ds", y="yhat", title="🌍 Yearly Temperature Averages (2025–2030)", color="yhat", color_continuous_scale="thermal")
         st.plotly_chart(fig2)
+
+# ---- TAB 5: EXTREME WEATHER PREDICTIONS ----
+with tab5:
+    st.subheader("⚠️ Predicting Extreme Weather Events")
+
+    if df is not None:
+        df["seasonality"] = df["ds"].dt.month.apply(lambda x: "Winter" if x in [12,1,2] else "Summer" if x in [6,7,8] else "Other")
+        model = Prophet()
+        model.add_seasonality(name="yearly", period=365, fourier_order=10)
+        model.fit(df, algorithm="Newton")
+
+        future_extreme = model.make_future_dataframe(periods=1825)
+        forecast_extreme = model.predict(future_extreme)
+
+        high_risk = forecast_extreme[forecast_extreme["yhat"] > forecast_extreme["yhat"].quantile(0.95)]
+        fig3 = px.scatter(high_risk, x="ds", y="yhat", color="yhat", title="⚠️ Predicted Extreme Weather (Heatwaves & Storms)", color_continuous_scale="reds")
+        st.plotly_chart(fig3)
 
 # ---- FOOTER ----
 st.markdown("<hr>", unsafe_allow_html=True)
