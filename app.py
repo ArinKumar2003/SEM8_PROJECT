@@ -57,6 +57,30 @@ def get_live_weather(city):
         st.error(f"❌ API Request failed: {e}")
         return None
 
+# ---- SIDEBAR FILE UPLOAD ----
+st.sidebar.subheader("📂 Upload Climate CSV (1971+)")
+uploaded_file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
+df = None
+
+if uploaded_file:
+    try:
+        df = pd.read_csv(uploaded_file)
+        if df.empty:
+            st.sidebar.error("⚠️ The uploaded CSV is empty.")
+            df = None
+        elif not all(col in df.columns for col in ["Years", "Month", "Day", "CO2", "Humidity", "SeaLevel", "Temperature"]):
+            st.sidebar.error("⚠️ Invalid CSV format. Required: Years, Month, Day, CO2, Humidity, SeaLevel, Temperature.")
+            df = None
+        else:
+            df["ds"] = pd.to_datetime(df[["Years", "Month", "Day"]])
+            df = df[["ds", "CO2", "Humidity", "SeaLevel", "Temperature"]]
+    except Exception as e:
+        st.sidebar.error(f"❌ Error: {str(e)}")
+        df = None
+
+# ---- Initialize Variables ----
+live_weather = None  # ✅ Ensure `live_weather` is always initialized
+
 # ---- TAB LAYOUT ----
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Live Weather", "📜 Historical Data (1971)", "🔮 AI Predictions (2025+)", "📈 Monthly & Yearly Forecasts", "🆘 Help"])
 
@@ -80,74 +104,53 @@ with tab1:
             col2.metric("💧 Humidity", f"{live_weather['Humidity']}%")
             col3.metric("🌎 CO₂ Levels", f"{live_weather['CO2']} ppm")
 
-# ---- TAB 2: HISTORICAL DATA (1971 - PRESENT) ----
+# ---- TAB 2: HISTORICAL CLIMATE DATA ----
 with tab2:
-    st.subheader("📜 Historical Climate Data (1971-Present)")
-
-    uploaded_file = st.file_uploader("📂 Upload Climate CSV", type=["csv"])
-    df = None
-
-    if uploaded_file:
-        try:
-            df = pd.read_csv(uploaded_file)
-            if df.empty:
-                st.error("⚠️ The uploaded CSV is empty.")
-            elif not all(col in df.columns for col in ["Years", "Month", "Day", "CO2", "Humidity", "SeaLevel", "Temperature"]):
-                st.error("⚠️ Invalid CSV format. Required: Years, Month, Day, CO2, Humidity, SeaLevel, Temperature.")
-            else:
-                df["ds"] = pd.to_datetime(df[["Years", "Month", "Day"]])
-                df = df[["ds", "CO2", "Humidity", "SeaLevel", "Temperature"]]
-                st.success("✔️ Data successfully loaded!")
-
-                # Display raw data
-                st.dataframe(df)
-
-                # Interactive line plot
-                fig = px.line(df, x="ds", y=["Temperature", "CO2", "Humidity", "SeaLevel"], title="📊 Historical Climate Trends (1971-Present)")
-                st.plotly_chart(fig)
-
-        except Exception as e:
-            st.error(f"❌ Error: {str(e)}")
-
-# ---- TAB 3: AI PREDICTIONS (2025+) ----
-with tab3:
-    st.subheader("🔮 AI Climate Predictions (2025-2030)")
+    st.subheader("📜 Historical Climate Data (Since 1971)")
     
-    if df is not None and len(df) > 1:
-        try:
-            model = Prophet()
-            model.fit(df.rename(columns={"Temperature": "y"}))
-            
-            future = model.make_future_dataframe(periods=365*5, freq="D")  # Predict 5 years
-            forecast = model.predict(future)
-            
-            fig = px.line(forecast, x="ds", y="yhat", title="📈 Predicted Temperature Trends (2025–2030)")
-            st.plotly_chart(fig)
+    if df is not None:
+        st.write("📅 **Displaying first few rows of historical data:**")
+        st.dataframe(df.head())
 
-        except Exception as e:
-            st.error(f"❌ Forecasting error: {e}")
+        fig_hist = px.line(df, x="ds", y="Temperature", title="📊 Historical Temperature Trends (1971+)")
+        st.plotly_chart(fig_hist)
     else:
-        st.warning("⚠️ Not enough data to train AI model.")
+        st.warning("📌 Upload historical climate data to view insights.")
 
-# ---- TAB 4: MONTHLY & YEARLY FORECASTS ----
-with tab4:
-    st.subheader("📆 Monthly & Yearly Climate Predictions")
+# ---- TAB 3: PREDICTIVE CLIMATE CONDITIONS (2025+) ----
+with tab3:
+    st.subheader("🔮 AI Climate Predictions (2025+)")
 
     if df is not None and len(df) > 1:
-        try:
-            forecast["ds"] = pd.to_datetime(forecast["ds"])
-            forecast["year"] = forecast["ds"].dt.year
-            forecast["month"] = forecast["ds"].dt.month
+        model = Prophet()
+        model.fit(df.rename(columns={"Temperature": "y"}))
 
-            # Monthly Aggregation
-            future_monthly = forecast.groupby(["year", "month"]).mean().reset_index()
-            future_monthly["ds"] = pd.to_datetime(future_monthly[["year", "month"]].assign(day=1))
+        future_5y = model.make_future_dataframe(periods=365 * 5)  # 5 years ahead
+        forecast_5y = model.predict(future_5y)
 
-            fig_monthly = px.line(future_monthly, x="ds", y="yhat", title="📊 Monthly Predicted Climate Trends (2025–2030)")
-            st.plotly_chart(fig_monthly)
+        fig_forecast = px.line(forecast_5y, x="ds", y="yhat", title="🌡 Future Temperature Predictions (2025-2030)")
+        st.plotly_chart(fig_forecast)
 
-        except Exception as e:
-            st.error(f"❌ Error processing monthly predictions: {e}")
+    else:
+        st.warning("📌 Upload historical data to generate predictions.")
+
+# ---- TAB 4: MONTHLY & YEARLY CLIMATE FORECASTS ----
+with tab4:
+    st.subheader("📈 Monthly & Yearly Climate Forecasts")
+
+    if df is not None:
+        future_monthly = forecast_5y.resample("M", on="ds").mean().reset_index()
+        future_yearly = forecast_5y.resample("Y", on="ds").mean().reset_index()
+
+        st.write("📅 **Monthly Predictions:**")
+        fig_monthly = px.line(future_monthly, x="ds", y="yhat", title="📊 Monthly Predicted Climate Trends (2025–2030)")
+        st.plotly_chart(fig_monthly)
+
+        st.write("📅 **Yearly Predictions:**")
+        fig_yearly = px.line(future_yearly, x="ds", y="yhat", title="📊 Yearly Predicted Climate Trends (2025–2030)")
+        st.plotly_chart(fig_yearly)
+    else:
+        st.warning("📌 Upload historical data to view forecasts.")
 
 # ---- TAB 5: HELP & ALERTS ----
 with tab5:
@@ -160,12 +163,12 @@ with tab5:
     - **Extreme Weather Alerts**: Automated alerts for dangerous temperatures.
     """)
 
-    if live_weather:
+    if live_weather:  # ✅ Check if `live_weather` exists before accessing it
         if live_weather["Temperature"] > 40:
             st.error("🚨 Heatwave Alert! High temperatures detected.")
         elif live_weather["Temperature"] < 0:
             st.warning("❄️ Cold Weather Alert! Freezing conditions expected.")
         elif live_weather["CO2"] > 450:
             st.warning("🌎 High CO₂ Levels Detected! Consider environmental precautions.")
-
-
+    else:
+        st.info("ℹ️ Fetch live weather data to enable alerts.")
