@@ -84,7 +84,7 @@ with tab1:
                 df = pd.concat([df, pd.DataFrame([live_weather])], ignore_index=True)
 
 with tab2:
-    st.subheader("📈 AI Climate Forecast")
+    st.subheader("📈 AI Climate Forecast (Including Live Weather Data)")
 
     if df is not None and len(df) > 1:
         model = Prophet()
@@ -93,7 +93,7 @@ with tab2:
         future = model.make_future_dataframe(periods=1825)  # Predict next 5 years
         forecast = model.predict(future)
 
-        fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends")
+        fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends (With Live Data)")
         fig.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot"))
         fig.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot"))
         st.plotly_chart(fig)
@@ -106,6 +106,12 @@ with tab3:
 
     if df is not None:
         model = Prophet()
+        
+        # Adding Live Weather Data into the Model
+        live_weather = get_live_weather("New York")  # Default city; user can modify
+        if live_weather:
+            df = pd.concat([df, pd.DataFrame([live_weather])], ignore_index=True)
+
         model.fit(df)
 
         future_5y = model.make_future_dataframe(periods=1825)  
