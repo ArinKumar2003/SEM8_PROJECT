@@ -98,9 +98,12 @@ with tab2:
         future = model.make_future_dataframe(periods=1825)  
         forecast = model.predict(future)
 
-        fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends")
-        fig.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot"))
-        fig.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot"))
+        # 🔥 Show only predictions from 2025 onward
+        forecast_future = forecast[forecast["ds"] >= "2025-01-01"]
+
+        fig = px.line(forecast_future, x="ds", y="yhat", title="Predicted Temperature Trends (2025+)")
+        fig.add_scatter(x=forecast_future["ds"], y=forecast_future["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot"))
+        fig.add_scatter(x=forecast_future["ds"], y=forecast_future["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot"))
         st.plotly_chart(fig)
 
     else:
@@ -108,7 +111,7 @@ with tab2:
 
 # ---- TAB 3: MONTHLY PREDICTIONS ----
 with tab3:
-    st.subheader("📆 Monthly Climate Predictions")
+    st.subheader("📆 Monthly Climate Predictions (2025–2030)")
 
     if df is not None:
         model = Prophet()
@@ -117,30 +120,28 @@ with tab3:
         future_5y = model.make_future_dataframe(periods=1825)
         forecast_5y = model.predict(future_5y)
 
-        future_5y["ds"] = pd.to_datetime(future_5y["ds"])
-        future_5y.set_index("ds", inplace=True)
+        # 🔥 Ensure predictions start from 2025
+        forecast_future = forecast_5y[forecast_5y["ds"] >= "2025-01-01"]
 
-        # Extract only the yhat column before resampling
-        future_monthly = forecast_5y[["ds", "yhat"]].set_index("ds").resample("M").mean().reset_index()
+        # Resample to Monthly Predictions
+        future_monthly = forecast_future[["ds", "yhat"]].set_index("ds").resample("M").mean().reset_index()
 
-        # Debugging: Print the available columns
-        st.write("Columns available in future_monthly:", future_monthly.columns)
-
-        # Ensure yhat exists before plotting
-        if "yhat" in future_monthly.columns:
-            fig = px.line(future_monthly, x="ds", y="yhat", title="📊 Monthly Predicted Climate Trends (2025–2030)")
-            st.plotly_chart(fig)
-        else:
-            st.error("⚠️ No 'yhat' column found in forecast data!")
+        fig = px.line(future_monthly, x="ds", y="yhat", title="📊 Monthly Predicted Climate Trends (2025–2030)")
+        st.plotly_chart(fig)
 
 # ---- TAB 4: YEARLY PREDICTIONS ----
 with tab4:
     st.subheader("📌 Yearly Climate Predictions (2025–2030)")
 
     if df is not None:
-        future_yearly = forecast_5y[["ds", "yhat"]].set_index("ds").resample("Y").mean().reset_index()
+        # 🔥 Filter only future data (2025+)
+        future_yearly = forecast_future[["ds", "yhat"]].set_index("ds").resample("Y").mean().reset_index()
 
-        fig2 = px.bar(future_yearly, x="ds", y="yhat", title="🌍 Yearly Temperature Averages (2025–2030)", color="yhat", color_continuous_scale="thermal")
+        fig2 = px.bar(
+            future_yearly, x="ds", y="yhat",
+            title="🌍 Yearly Temperature Averages (2025–2030)",
+            color="yhat", color_continuous_scale="thermal"
+        )
         st.plotly_chart(fig2)
 
 # ---- TAB 5: EXTREME WEATHER PREDICTIONS ----
@@ -155,8 +156,10 @@ with tab5:
         future_extreme = model.make_future_dataframe(periods=1825)
         forecast_extreme = model.predict(future_extreme)
 
-        high_risk = forecast_extreme[forecast_extreme["yhat"] > forecast_extreme["yhat"].quantile(0.95)]
-        fig3 = px.scatter(high_risk, x="ds", y="yhat", color="yhat", title="⚠️ Predicted Extreme Weather Events", color_continuous_scale="reds")
+        # 🔥 Filter for extreme events
+        high_risk = forecast_extreme[(forecast_extreme["yhat"] > forecast_extreme["yhat"].quantile(0.95)) & (forecast_extreme["ds"] >= "2025-01-01")]
+
+        fig3 = px.scatter(high_risk, x="ds", y="yhat", color="yhat", title="⚠️ Predicted Extreme Weather Events (2025+)", color_continuous_scale="reds")
         st.plotly_chart(fig3)
 
 # ---- FOOTER ----
