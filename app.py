@@ -23,19 +23,18 @@ def get_live_weather(city):
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json()
-        
+
         if "error" in data:
             st.error(f"⚠️ {data['error']['message']}")
             return None
 
         return {
             "ds": datetime.datetime.now(),
-            "y": float(data["current"]["temp_c"]),
-            "humidity": data["current"]["humidity"],
-            "wind_kph": data["current"]["wind_kph"],
-            "precip_mm": data["current"]["precip_mm"],
-            "condition": data["current"]["condition"]["text"],
-            "icon": data["current"]["condition"]["icon"]
+            "Temperature": float(data["current"]["temp_c"]),
+            "Humidity": data["current"]["humidity"],
+            "CO2": None,  # Live CO₂ data not available, but can be manually integrated
+            "SeaLevel": None,  # Live sea level data unavailable
+            "Condition": data["current"]["condition"]["text"]
         }
 
     except requests.exceptions.RequestException as e:
@@ -44,16 +43,19 @@ def get_live_weather(city):
 
 # ---- SIDEBAR: HISTORICAL DATA UPLOAD ----
 st.sidebar.header("📂 Upload Historical Climate Data")
-uploaded_file = st.sidebar.file_uploader("Upload CSV (Years, Temperature, Humidity, Wind, Precipitation)", type=["csv"])
+uploaded_file = st.sidebar.file_uploader("Upload CSV (Years, Month, Day, CO2, Humidity, SeaLevel, Temperature)", type=["csv"])
 df = None
 
 if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
-        df["ds"] = pd.to_datetime(df["Years"], format="%Y")
-        df = df[["ds", "Temperature", "Humidity", "Wind", "Precipitation"]]
+        
+        # Ensure correct datetime format
+        df["ds"] = pd.to_datetime(df[["Years", "Month", "Day"]])
+        df = df[["ds", "CO2", "Humidity", "SeaLevel", "Temperature"]]
         df.rename(columns={"Temperature": "y"}, inplace=True)  # Prophet requires 'y'
         df.dropna(inplace=True)
+
     except Exception as e:
         st.sidebar.error(f"❌ Error: {str(e)}")
         df = None
@@ -77,15 +79,9 @@ with tab1:
         live_weather = get_live_weather(city)
         if live_weather:
             st.success(f"✔️ Live weather for {city} fetched successfully!")
-
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("🌡 Temperature", f"{live_weather['y']}°C")
-            col2.metric("💨 Wind Speed", f"{live_weather['wind_kph']} km/h")
-            col3.metric("💧 Humidity", f"{live_weather['humidity']}%")
-            col4.metric("🌧 Precipitation", f"{live_weather['precip_mm']} mm")
-
-            st.image(f"https:{live_weather['icon']}", width=80)
-            st.markdown(f"### {live_weather['condition']}")
+            st.metric("🌡 Temperature", f"{live_weather['Temperature']}°C")
+            st.metric("💧 Humidity", f"{live_weather['Humidity']}%")
+            st.markdown(f"### {live_weather['Condition']}")
 
             if df is not None:
                 df = pd.concat([df, pd.DataFrame([live_weather])], ignore_index=True)
@@ -93,7 +89,7 @@ with tab1:
 # ---- TAB 2: CLIMATE TRENDS (1971–2025) ----
 with tab2:
     st.subheader("📊 Historical Climate Trends (1971–2025)")
-    
+
     if df is not None:
         model = Prophet()
         model.fit(df)
@@ -113,6 +109,9 @@ with tab3:
     st.subheader("📆 Climate Predictions for 2025–2035")
 
     if df is not None:
+        future = model.make_future_dataframe(periods=365*10)  # Forecast until 2035
+        forecast = model.predict(future)
+
         forecast_future = forecast[forecast["ds"] >= "2025-04-01"]
         future_monthly = forecast_future.set_index("ds").resample("M").mean().reset_index()
 
@@ -122,8 +121,8 @@ with tab3:
         st.markdown("### 🔍 Prediction Insights:")
         st.write("""
         - 🌡 **Temperatures** expected to rise gradually.
-        - 💧 **Humidity levels** may increase, leading to heavier precipitation in some regions.
-        - 💨 **Wind speeds** likely to be higher during summer months.
+        - 🌊 **Sea level rise** may accelerate post-2027.
+        - 💨 **More extreme weather events** possible in 2030.
         """)
 
 # ---- TAB 4: YEARLY OUTLOOK ----
@@ -143,7 +142,7 @@ with tab4:
         st.markdown("### 📅 Summary:")
         st.write("""
         - 🌡 **Temperature increases** will be more noticeable in 2027 and beyond.
-        - 💨 **Extreme wind events** expected in 2030 and 2033.
+        - 🌊 **CO₂ levels** expected to cross 450ppm by 2030.
         - 🌧 **Higher rainfall in winter months** could indicate flood risks.
         """)
 
@@ -169,10 +168,7 @@ with tab6:
     st.subheader("❓ Help & FAQs")
     st.write("""
     - 📂 **How do I upload historical data?**  
-      Use the sidebar to upload a CSV file containing **Years, Temperature, Humidity, Wind, and Precipitation**.
-
-    - 🌡 **Where does live weather come from?**  
-      We use data from **WeatherAPI.com**.
+      Use the sidebar to upload a CSV file containing **Years, Month, Day, CO₂, Humidity, SeaLevel, Temperature**.
 
     - 📊 **What model is used for predictions?**  
       We use **Facebook Prophet**, a robust time-series forecasting model.
