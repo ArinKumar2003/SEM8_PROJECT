@@ -29,13 +29,11 @@ def get_live_weather(city):
             return None
 
         return {
-            "city": city,
             "ds": datetime.datetime.now(),
             "y": float(data["current"]["temp_c"]),  # Temperature in Celsius
             "humidity": data["current"]["humidity"],
             "wind_kph": data["current"]["wind_kph"],
             "precip_mm": data["current"]["precip_mm"],
-            "feels_like": data["current"]["feelslike_c"],
             "uv_index": data["current"]["uv"],
             "condition": data["current"]["condition"]["text"],
             "icon": data["current"]["condition"]["icon"]
@@ -53,59 +51,33 @@ df = None
 if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
-
-        # Validate CSV format
-        required_columns = {"Years", "Temperature"}
-        if not required_columns.issubset(df.columns):
-            st.sidebar.error("⚠️ Invalid CSV format. Required columns: Years, Temperature.")
-            df = None
-        else:
-            df["ds"] = pd.to_datetime(df["Years"], errors="coerce")  # Convert to datetime
-            df.dropna(subset=["ds"], inplace=True)  # Remove invalid dates
-            df = df[["ds", "Temperature"]].rename(columns={"Temperature": "y"})  # Rename for Prophet
-            df["y"] = pd.to_numeric(df["y"], errors="coerce")  # Ensure temperature is numeric
-            df.dropna(inplace=True)  # Remove any rows with NaN values
+        df["ds"] = pd.to_datetime(df["Years"], errors="coerce")
+        df = df[["ds", "Temperature"]].rename(columns={"Temperature": "y"})  
+        df.dropna(inplace=True)
 
     except Exception as e:
         st.sidebar.error(f"❌ Error: {str(e)}")
         df = None
 
 # ---- TABS ----
-tab1, tab2, tab3 = st.tabs(["🌡 Live Weather", "📊 Climate Forecast", "📌 Future Climate Insights"])
+tab1, tab2, tab3 = st.tabs(["🌡 Live Weather", "📊 Climate Forecast", "📌 Future Climate Predictions"])
 
 with tab1:
     st.subheader("🌍 Live Weather Dashboard")
-    
     city = st.text_input("Enter City for Live Data", "New York")
-    live_weather = None
 
     if st.button("Fetch Live Weather"):
         live_weather = get_live_weather(city)
         if live_weather:
             st.success(f"✔️ Live weather for {city} fetched successfully!")
 
-            # Display Live Weather Conditions in a Card Layout
-            col1, col2, col3 = st.columns([2, 2, 2])
+            # Display Weather Conditions
+            col1, col2, col3 = st.columns(3)
+            col1.metric("🌡 Temperature", f"{live_weather['y']}°C")
+            col2.metric("💨 Wind Speed", f"{live_weather['wind_kph']} km/h")
+            col3.metric("💧 Humidity", f"{live_weather['humidity']}%")
 
-            with col1:
-                st.metric(label="🌡 Temperature", value=f"{live_weather['y']}°C", delta=f"Feels Like {live_weather['feels_like']}°C")
-
-            with col2:
-                st.metric(label="💨 Wind Speed", value=f"{live_weather['wind_kph']} km/h")
-
-            with col3:
-                st.metric(label="💧 Humidity", value=f"{live_weather['humidity']}%")
-
-            col4, col5 = st.columns([2, 2])
-
-            with col4:
-                st.metric(label="🌧 Precipitation", value=f"{live_weather['precip_mm']} mm")
-
-            with col5:
-                st.metric(label="🌞 UV Index", value=live_weather["uv_index"])
-
-            # Display Weather Condition Icon & Text
-            st.image(f"https:{live_weather['icon']}", width=100)
+            st.image(f"https:{live_weather['icon']}", width=80)
             st.markdown(f"### {live_weather['condition']}")
 
             if df is not None:
@@ -115,51 +87,54 @@ with tab2:
     st.subheader("📈 AI Climate Forecast")
 
     if df is not None and len(df) > 1:
-        try:
-            model = Prophet()
-            model.fit(df)
+        model = Prophet()
+        model.fit(df)
 
-            future = model.make_future_dataframe(periods=1825)  # Predict next 5 years
-            forecast = model.predict(future)
+        future = model.make_future_dataframe(periods=1825)  # Predict next 5 years
+        forecast = model.predict(future)
 
-            # Forecast Visualization
-            fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends (Including Live Data)")
-            fig.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound")
-            fig.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound")
+        fig = px.line(forecast, x="ds", y="yhat", title="Predicted Temperature Trends")
+        fig.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot"))
+        fig.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot"))
+        st.plotly_chart(fig)
 
-            st.plotly_chart(fig)
-
-        except Exception as e:
-            st.error(f"❌ Forecasting error: {e}")
     else:
         st.info("📂 Upload a CSV file with climate data to enable forecasting.")
 
 with tab3:
-    st.subheader("📌 Future Climate Insights (2025–2030)")
-    
-    if df is not None:
-        # Forecasting for next 5 years (until 2030)
-        future_5y = model.make_future_dataframe(periods=1825)  # 5 years * 365 days
-        forecast_5y = model.predict(future_5y)
+    st.subheader("📌 Future Climate Predictions (2025–2030)")
 
-        # Filtering only future dates after March 2025
+    if df is not None:
+        model = Prophet()
+        model.fit(df)
+
+        future_5y = model.make_future_dataframe(periods=1825)  
+        forecast_5y = model.predict(future_5y)
         future_5y = forecast_5y[forecast_5y["ds"] > "2025-03-01"]
+
+        # ---- FIXED ISSUE WITH RESAMPLING ----
         future_5y["ds"] = pd.to_datetime(future_5y["ds"])
         future_5y.set_index("ds", inplace=True)
-
-        # Select only numeric columns for resampling
         numeric_cols = future_5y.select_dtypes(include=["number"]).columns
         future_monthly = future_5y[numeric_cols].resample("M").mean().reset_index()
 
+        # ---- INTERACTIVE VISUALIZATION ----
         st.write("### 🔮 Climate Predictions from April 2025 Onwards:")
+        fig = px.line(future_monthly, x="ds", y="yhat", title="📊 Monthly Predicted Climate Trends (2025–2030)")
+        fig.add_scatter(x=future_monthly["ds"], y=future_monthly["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot"))
+        fig.add_scatter(x=future_monthly["ds"], y=future_monthly["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot"))
+        st.plotly_chart(fig)
 
+        # ---- YEARLY SUMMARY CHART ----
+        future_yearly = future_5y[numeric_cols].resample("Y").mean().reset_index()
+        fig2 = px.bar(future_yearly, x="ds", y="yhat", title="🌍 Yearly Temperature Averages (2025–2030)", color="yhat", color_continuous_scale="thermal")
+        st.plotly_chart(fig2)
+
+        # ---- DISPLAY TEXTUAL PREDICTIONS ----
         for _, row in future_monthly.iterrows():
             temp = round(row["yhat"], 2)
             date = row["ds"].strftime("%B %Y")  # Format: "April 2025"
-
-            # AI-based climate condition descriptions
             description = "🌡 Moderate Climate" if 10 <= temp <= 30 else "🔥 Extreme Heat" if temp > 30 else "❄️ Cold Weather"
-
             st.markdown(f"**{date}**: {temp}°C - {description}")
 
 # ---- FOOTER ----
