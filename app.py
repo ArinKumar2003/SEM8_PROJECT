@@ -34,7 +34,11 @@ def get_live_weather(city):
             "y": float(data["current"]["temp_c"]),  # Temperature in Celsius
             "humidity": data["current"]["humidity"],
             "wind_kph": data["current"]["wind_kph"],
-            "precip_mm": data["current"]["precip_mm"]
+            "precip_mm": data["current"]["precip_mm"],
+            "feels_like": data["current"]["feelslike_c"],
+            "uv_index": data["current"]["uv"],
+            "condition": data["current"]["condition"]["text"],
+            "icon": data["current"]["condition"]["icon"]
         }
 
     except requests.exceptions.RequestException as e:
@@ -67,10 +71,10 @@ if uploaded_file:
         df = None
 
 # ---- TABS ----
-tab1, tab2, tab3 = st.tabs(["🌡 Live Weather Data", "📊 Climate Data & Forecast", "📌 About"])
+tab1, tab2, tab3 = st.tabs(["🌡 Live Weather", "📊 Climate Forecast", "📌 About"])
 
 with tab1:
-    st.subheader("🌍 Live Weather Conditions")
+    st.subheader("🌍 Live Weather Dashboard")
     
     city = st.text_input("Enter City for Live Data", "New York")
     live_weather = None
@@ -79,20 +83,37 @@ with tab1:
         live_weather = get_live_weather(city)
         if live_weather:
             st.success(f"✔️ Live weather for {city} fetched successfully!")
-            
-            # Display Data
-            st.write(f"📍 Location: **{live_weather['city']}**")
-            st.write(f"🌡 Temperature: **{live_weather['y']}°C**")
-            st.write(f"💧 Humidity: **{live_weather['humidity']}%**")
-            st.write(f"💨 Wind Speed: **{live_weather['wind_kph']} km/h**")
-            st.write(f"🌧 Precipitation: **{live_weather['precip_mm']} mm**")
-            
-            # Visualizing Live Weather Data
+
+            # Display Live Weather Conditions in a Card Layout
+            col1, col2, col3 = st.columns([2, 2, 2])
+
+            with col1:
+                st.metric(label="🌡 Temperature", value=f"{live_weather['y']}°C", delta=f"Feels Like {live_weather['feels_like']}°C")
+
+            with col2:
+                st.metric(label="💨 Wind Speed", value=f"{live_weather['wind_kph']} km/h")
+
+            with col3:
+                st.metric(label="💧 Humidity", value=f"{live_weather['humidity']}%")
+
+            col4, col5 = st.columns([2, 2])
+
+            with col4:
+                st.metric(label="🌧 Precipitation", value=f"{live_weather['precip_mm']} mm")
+
+            with col5:
+                st.metric(label="🌞 UV Index", value=live_weather["uv_index"])
+
+            # Display Weather Condition Icon & Text
+            st.image(f"https:{live_weather['icon']}", width=100)
+            st.markdown(f"### {live_weather['condition']}")
+
+            # Weather Data Visualization
             weather_df = pd.DataFrame({
-                "Condition": ["Temperature (°C)", "Humidity (%)", "Wind Speed (km/h)", "Precipitation (mm)"],
-                "Value": [live_weather["y"], live_weather["humidity"], live_weather["wind_kph"], live_weather["precip_mm"]]
+                "Condition": ["Temperature (°C)", "Humidity (%)", "Wind Speed (km/h)", "Precipitation (mm)", "UV Index"],
+                "Value": [live_weather["y"], live_weather["humidity"], live_weather["wind_kph"], live_weather["precip_mm"], live_weather["uv_index"]]
             })
-            
+
             fig = px.bar(weather_df, x="Condition", y="Value", title="Live Weather Conditions", color="Condition")
             st.plotly_chart(fig)
 
@@ -110,7 +131,7 @@ with tab2:
             future = model.make_future_dataframe(periods=365)  # Predict next 365 days
             forecast = model.predict(future)
 
-            # Plot Actual Data + Forecast
+            # Forecast Visualization
             fig = go.Figure()
 
             # Actual Data
@@ -123,13 +144,17 @@ with tab2:
             fig.add_trace(go.Scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot")))
             fig.add_trace(go.Scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot")))
 
-            fig.update_layout(title="Predicted Temperature Trends (Including Live Data)", xaxis_title="Year", yaxis_title="Temperature (°C)")
+            fig.update_layout(
+                title="Predicted Temperature Trends (Including Live Data)",
+                xaxis_title="Year",
+                yaxis_title="Temperature (°C)",
+                hovermode="x unified"
+            )
+
             st.plotly_chart(fig)
 
         except Exception as e:
             st.error(f"❌ Forecasting error: {e}")
-    elif df is not None:
-        st.error("⚠️ Not enough data to train AI model.")
     else:
         st.info("📂 Upload a CSV file with climate data to enable forecasting.")
 
@@ -141,17 +166,11 @@ with tab3:
 
         ### Features:
         - **Live Weather Data** 🌡  
-          Fetch real-time **temperature, humidity, wind speed, and precipitation** for any city.
+          Fetch real-time **temperature, humidity, wind speed, precipitation, and UV Index** for any city.
         - **Climate Forecasting** 📊  
           Upload historical **temperature data** and generate AI-based predictions.
         - **Interactive Visuals** 📈  
           View **weather charts** and **forecast trends** dynamically.
-          
-        ### How to Use:
-        1. Go to the **Live Weather** tab and enter a city.
-        2. Click **Fetch Live Weather** to view real-time data.
-        3. Upload a **CSV file** (Years, Temperature) to get AI-powered forecasts.
-        4. Check **graphs & trends** to understand climate patterns.
         
         🚀 **Developed by AI Climate Team | Powered by WeatherAPI & Streamlit**
     """)
