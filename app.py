@@ -97,9 +97,14 @@ with tab2:
         future = model.make_future_dataframe(periods=365*54)  # Extending to 2025
         forecast = model.predict(future)
 
-        fig = px.line(forecast, x="ds", y="yhat", title="Temperature Trends (1971–2025)")
-        fig.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound", line=dict(dash="dot"))
-        fig.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound", line=dict(dash="dot"))
+        fig = px.line(forecast, x="ds", y="yhat", title="Temperature Trends (1971–2025)", 
+                      labels={"ds": "Year", "yhat": "Predicted Temperature (°C)"})
+        fig.update_traces(mode='lines+markers', marker=dict(size=5))
+        fig.update_layout(
+            xaxis_rangeslider_visible=True,  # Adds a range slider for the x-axis
+            hovermode="x unified", 
+            showlegend=True
+        )
         st.plotly_chart(fig)
     else:
         st.info("📂 Upload a CSV file to display trends.")
@@ -115,7 +120,14 @@ with tab3:
         forecast_future = forecast[forecast["ds"] >= "2025-04-01"]
         future_monthly = forecast_future.set_index("ds").resample("M").mean().reset_index()
 
-        fig = px.line(future_monthly, x="ds", y="yhat", title="📊 Monthly Climate Predictions (2025–2035)")
+        fig = px.line(future_monthly, x="ds", y="yhat", title="📊 Monthly Climate Predictions (2025–2035)",
+                      labels={"ds": "Month", "yhat": "Predicted Temperature (°C)"})
+        fig.update_traces(mode='lines+markers', marker=dict(size=5))
+        fig.update_layout(
+            xaxis_rangeslider_visible=True,  # Allows zooming and range selection
+            hovermode="x unified", 
+            showlegend=True
+        )
         st.plotly_chart(fig)
 
         st.markdown("### 🔍 Prediction Insights:")
@@ -135,7 +147,12 @@ with tab4:
         fig2 = px.bar(
             future_yearly, x="ds", y="yhat",
             title="🌍 Yearly Temperature Averages (2025–2035)",
-            color="yhat", color_continuous_scale="thermal"
+            color="yhat", color_continuous_scale="thermal",
+            labels={"ds": "Year", "yhat": "Predicted Temperature (°C)"}
+        )
+        fig2.update_layout(
+            hovermode="x unified", 
+            showlegend=True
         )
         st.plotly_chart(fig2)
 
@@ -160,7 +177,12 @@ with tab5:
 
         high_risk = forecast_extreme[(forecast_extreme["yhat"] > forecast_extreme["yhat"].quantile(0.95)) & (forecast_extreme["ds"] >= "2025-04-01")]
 
-        fig3 = px.scatter(high_risk, x="ds", y="yhat", color="yhat", title="⚠️ Extreme Weather Events (2025+)", color_continuous_scale="reds")
+        fig3 = px.scatter(high_risk, x="ds", y="yhat", color="yhat", title="⚠️ Extreme Weather Events (2025+)", 
+                          color_continuous_scale="reds", labels={"ds": "Year", "yhat": "Extreme Temperature (°C)"})
+        fig3.update_layout(
+            hovermode="x unified", 
+            showlegend=True
+        )
         st.plotly_chart(fig3)
 
 # ---- TAB 6: HELP & FAQs ----
