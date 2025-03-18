@@ -71,7 +71,7 @@ if uploaded_file:
         df = None
 
 # ---- TABS ----
-tab1, tab2, tab3 = st.tabs(["🌡 Live Weather", "📊 Climate Forecast", "📌 About"])
+tab1, tab2, tab3 = st.tabs(["🌡 Live Weather", "📊 Climate Forecast", "📌 Future Climate Insights"])
 
 with tab1:
     st.subheader("🌍 Live Weather Dashboard")
@@ -108,17 +108,8 @@ with tab1:
             st.image(f"https:{live_weather['icon']}", width=100)
             st.markdown(f"### {live_weather['condition']}")
 
-            # Weather Data Visualization
-            weather_df = pd.DataFrame({
-                "Condition": ["Temperature (°C)", "Humidity (%)", "Wind Speed (km/h)", "Precipitation (mm)", "UV Index"],
-                "Value": [live_weather["y"], live_weather["humidity"], live_weather["wind_kph"], live_weather["precip_mm"], live_weather["uv_index"]]
-            })
-
-            fig = px.bar(weather_df, x="Condition", y="Value", title="Live Weather Conditions", color="Condition")
-            st.plotly_chart(fig)
-
-        if df is not None:
-            df = pd.concat([df, pd.DataFrame([live_weather])], ignore_index=True)
+            if df is not None:
+                df = pd.concat([df, pd.DataFrame([live_weather])], ignore_index=True)
 
 with tab2:
     st.subheader("📈 AI Climate Forecast")
@@ -128,7 +119,7 @@ with tab2:
             model = Prophet()
             model.fit(df)
 
-            future = model.make_future_dataframe(periods=365)  # Predict next 365 days
+            future = model.make_future_dataframe(periods=730)  # Predict next 2 years
             forecast = model.predict(future)
 
             # Forecast Visualization
@@ -159,21 +150,24 @@ with tab2:
         st.info("📂 Upload a CSV file with climate data to enable forecasting.")
 
 with tab3:
-    st.subheader("📌 About This App")
-    st.markdown("""
-        Welcome to the **AI Climate Dashboard**! 🌍  
-        This tool provides **real-time weather insights** and **AI-powered climate forecasts**.
-
-        ### Features:
-        - **Live Weather Data** 🌡  
-          Fetch real-time **temperature, humidity, wind speed, precipitation, and UV Index** for any city.
-        - **Climate Forecasting** 📊  
-          Upload historical **temperature data** and generate AI-based predictions.
-        - **Interactive Visuals** 📈  
-          View **weather charts** and **forecast trends** dynamically.
-        
-        🚀 **Developed by AI Climate Team | Powered by WeatherAPI & Streamlit**
-    """)
+    st.subheader("📌 Future Climate Insights")
+    
+    if df is not None:
+        future_temp = forecast[["ds", "yhat"]].tail(24)  # Next 24 months
+        st.write("### 🔮 Climate Predictions for Upcoming Months:")
+        for _, row in future_temp.iterrows():
+            temp = round(row["yhat"], 2)
+            date = row["ds"].strftime("%B %Y")
+            if temp > 30:
+                description = "🔥 Hot and Dry Weather Expected"
+            elif temp > 20:
+                description = "☀️ Warm and Comfortable Conditions"
+            elif temp > 10:
+                description = "🌤 Mild and Pleasant Climate"
+            else:
+                description = "❄️ Cold and Chilly Temperatures"
+            
+            st.markdown(f"**{date}**: {temp}°C - {description}")
 
 # ---- FOOTER ----
 st.markdown("<hr>", unsafe_allow_html=True)
