@@ -35,6 +35,9 @@ def get_live_weather(city):
             "Humidity": data["current"]["humidity"],
             "CO2": data["current"].get("air_quality", {}).get("co", "Unavailable"),
             "Condition": data["current"]["condition"]["text"],
+            "Wind Speed (km/h)": data["current"]["wind_kph"],
+            "Pressure (hPa)": data["current"]["pressure_mb"],
+            "Visibility (km)": data["current"]["vis_km"],
             "Icon": data["current"]["condition"]["icon"]
         }
     except requests.exceptions.RequestException as e:
@@ -72,10 +75,18 @@ with tab1:
         live_weather = get_live_weather(city)
         if live_weather:
             st.write(f"### {city}: {live_weather['Condition']}")
-            st.image(f"https:{live_weather['Icon']}", width=50)
-            st.metric("Temperature (°C)", live_weather["y"])
-            st.metric("Humidity (%)", live_weather["Humidity"])
-            st.metric("CO₂ Level (ppm)", live_weather["CO2"])
+            st.image(f"https:{live_weather['Icon']}", width=80)
+            
+            # Display weather metrics
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Temperature (°C)", live_weather["y"])
+            col2.metric("Humidity (%)", live_weather["Humidity"])
+            col3.metric("CO₂ Level (ppm)", live_weather["CO2"])
+            
+            col4, col5, col6 = st.columns(3)
+            col4.metric("Wind Speed (km/h)", live_weather["Wind Speed (km/h)"])
+            col5.metric("Pressure (hPa)", live_weather["Pressure (hPa)"])
+            col6.metric("Visibility (km)", live_weather["Visibility (km)"])
 
 # ---- TAB 2: HISTORICAL DATA ----
 with tab2:
@@ -117,36 +128,37 @@ with tab4:
 
 # ---- TAB 5: EXTREME CONDITIONS & ALERTS ----
 with tab5:
-    st.subheader("🚨 Extreme Climate Alerts")
+    st.subheader("🚨 Extreme Climate Alerts & Visualizations")
     if df is not None:
+        # High temperatures
         extreme_temps = future_monthly[future_monthly["yhat"] > future_monthly["yhat"].quantile(0.95)]
         if not extreme_temps.empty:
-            st.error("⚠️ High-Temperature Alert! Unusual spikes detected in future months.")
-            st.table(extreme_temps[["ds", "yhat"]])
-        else:
-            st.success("✅ No extreme temperature conditions detected.")
+            st.error("⚠️ High-Temperature Alert! Unusual spikes detected.")
+            fig_extreme_hot = px.bar(extreme_temps, x="ds", y="yhat", title="🔥 Extreme Heat Predictions", labels={"yhat": "Temperature (°C)"})
+            st.plotly_chart(fig_extreme_hot)
 
-        extreme_humidity = future_monthly[future_monthly["yhat"] < future_monthly["yhat"].quantile(0.05)]
-        if not extreme_humidity.empty:
-            st.warning("⚠️ Low-Temperature Alert! Potential cold periods detected.")
-            st.table(extreme_humidity[["ds", "yhat"]])
+        # Low temperatures
+        extreme_cold = future_monthly[future_monthly["yhat"] < future_monthly["yhat"].quantile(0.05)]
+        if not extreme_cold.empty:
+            st.warning("⚠️ Cold Spell Alert! Sudden drops detected.")
+            fig_extreme_cold = px.bar(extreme_cold, x="ds", y="yhat", title="❄️ Extreme Cold Predictions", labels={"yhat": "Temperature (°C)"})
+            st.plotly_chart(fig_extreme_cold)
 
 # ---- TAB 6: SUMMARY ----
 with tab6:
     st.subheader("📖 Climate Summary & Predictions")
     st.markdown("""
         ### 🔹 **Climate Trends & Insights**
-        - **📜 Historical Data (1971-Present)**: Examines temperature changes over decades.
-        - **📅 Monthly Forecasts (2025-2030)**: AI-driven predictions for upcoming months.
-        - **📆 Yearly Forecasts (2025-2030)**: Long-term projections for global climate trends.
-        - **🚨 Extreme Climate Alerts**: Detects extreme weather patterns and warns about potential hazards.
+        - 📜 Historical data analysis since **1971**
+        - 📅 AI-driven forecasts for **2025–2030**
+        - 🚨 Alerts for **extreme temperature fluctuations**
 
-        ### 🔥 **Key Predictions**
-        - Rising temperatures are expected in many regions.
-        - Some months may experience extreme heat waves.
-        - Potential for increased CO₂ levels in urban areas.
+        **Key Observations:**
+        - Rising global temperatures predicted.
+        - Potential increase in extreme weather events.
+        - Need for sustainable actions to mitigate climate change.
 
-        **⚠️ Action Needed:** Sustainable efforts are required to reduce CO₂ emissions and mitigate climate change.
+        ✅ Stay informed, stay prepared!
     """)
 
 # ---- FOOTER ----
