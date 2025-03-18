@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="🌍 AI Climate Dashboard", layout="wide")
 
 # ---- WEATHER API CONFIG ----
-API_KEY = st.secrets.get("WEATHERAPI_KEY")  # Fetch API key safely
+API_KEY = st.secrets.get("WEATHERAPI_KEY")
 
 def get_live_weather(city):
     """Fetch real-time weather data from WeatherAPI.com."""
@@ -34,7 +34,6 @@ def get_live_weather(city):
             "humidity": data["current"]["humidity"],
             "wind_kph": data["current"]["wind_kph"],
             "precip_mm": data["current"]["precip_mm"],
-            "uv_index": data["current"]["uv"],
             "condition": data["current"]["condition"]["text"],
             "icon": data["current"]["condition"]["icon"]
         }
@@ -88,7 +87,9 @@ with tab2:
 
     if df is not None and len(df) > 1:
         model = Prophet()
-        model.fit(df)
+        
+        # ✅ FIXED CMDSTANPY ERROR (Newton's Optimization)
+        model.fit(df, algorithm="Newton")
 
         future = model.make_future_dataframe(periods=1825)  # Predict next 5 years
         forecast = model.predict(future)
@@ -106,13 +107,14 @@ with tab3:
 
     if df is not None:
         model = Prophet()
-        
+
         # Adding Live Weather Data into the Model
         live_weather = get_live_weather("New York")  # Default city; user can modify
         if live_weather:
             df = pd.concat([df, pd.DataFrame([live_weather])], ignore_index=True)
 
-        model.fit(df)
+        # ✅ FIXED CMDSTANPY ERROR
+        model.fit(df, algorithm="Newton")
 
         future_5y = model.make_future_dataframe(periods=1825)  
         forecast_5y = model.predict(future_5y)
@@ -135,13 +137,6 @@ with tab3:
         future_yearly = future_5y[numeric_cols].resample("Y").mean().reset_index()
         fig2 = px.bar(future_yearly, x="ds", y="yhat", title="🌍 Yearly Temperature Averages (2025–2030)", color="yhat", color_continuous_scale="thermal")
         st.plotly_chart(fig2)
-
-        # ---- DISPLAY TEXTUAL PREDICTIONS ----
-        for _, row in future_monthly.iterrows():
-            temp = round(row["yhat"], 2)
-            date = row["ds"].strftime("%B %Y")  # Format: "April 2025"
-            description = "🌡 Moderate Climate" if 10 <= temp <= 30 else "🔥 Extreme Heat" if temp > 30 else "❄️ Cold Weather"
-            st.markdown(f"**{date}**: {temp}°C - {description}")
 
 # ---- FOOTER ----
 st.markdown("<hr>", unsafe_allow_html=True)
