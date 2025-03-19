@@ -15,6 +15,7 @@ st.markdown("<h3 style='text-align: center;'>📊 Live & Historical Climate Anal
 # ---- WEATHER API CONFIG ----
 API_KEY = st.secrets["WEATHERAPI_KEY"] if "WEATHERAPI_KEY" in st.secrets else None  
 
+@st.cache_data()
 def get_live_weather(city):
     """Fetch real-time weather data from WeatherAPI.com."""
     if not API_KEY:
@@ -23,9 +24,11 @@ def get_live_weather(city):
     
     url = f"http://api.weatherapi.com/v1/current.json?key={API_KEY}&q={city}&aqi=yes"
     try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
+        with st.spinner("Fetching live weather data..."):
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+        
         if "error" in data:
             st.error(f"⚠️ {data['error']['message']}")
             return None
@@ -50,16 +53,9 @@ df = None
 
 if uploaded_file:
     try:
-        df = pd.read_csv(uploaded_file)
-        if df.empty:
-            st.sidebar.error("⚠️ The uploaded CSV is empty.")
-            df = None
-        elif not all(col in df.columns for col in ["Years", "Month", "Day", "CO2", "Humidity", "SeaLevel", "Temperature"]):
-            st.sidebar.error("⚠️ Invalid CSV format. Required columns: Years, Month, Day, CO2, Humidity, SeaLevel, Temperature.")
-            df = None
-        else:
-            df["ds"] = pd.to_datetime(df[["Years", "Month", "Day"]])
-            df = df[["ds", "CO2", "Humidity", "SeaLevel", "Temperature"]].rename(columns={"Temperature": "y"})
+        df = pd.read_csv(uploaded_file, usecols=["Years", "Month", "Day", "CO2", "Humidity", "SeaLevel", "Temperature"], dtype={"Years": int, "Month": int, "Day": int})
+        df["ds"] = pd.to_datetime(df[["Years", "Month", "Day"]])
+        df = df[["ds", "CO2", "Humidity", "SeaLevel", "Temperature"]].rename(columns={"Temperature": "y"})
     except Exception as e:
         st.sidebar.error(f"❌ Error: {str(e)}")
         df = None
@@ -70,14 +66,13 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Live Weather", "Historical Data",
 # ---- TAB 1: LIVE WEATHER ----
 with tab1:
     st.subheader("🌍 Live Weather Data")
-    city = st.text_input("Enter City", "New York")
+    city = st.selectbox("Select City", ["New York", "London", "Tokyo", "Sydney", "Mumbai"], index=0)
     if st.button("Fetch Live Weather"):
         live_weather = get_live_weather(city)
         if live_weather:
             st.write(f"### {city}: {live_weather['Condition']}")
             st.image(f"https:{live_weather['Icon']}", width=80)
             
-            # Display weather metrics
             col1, col2, col3 = st.columns(3)
             col1.metric("Temperature (°C)", live_weather["y"])
             col2.metric("Humidity (%)", live_weather["Humidity"])
@@ -87,15 +82,6 @@ with tab1:
             col4.metric("Wind Speed (km/h)", live_weather["Wind Speed (km/h)"])
             col5.metric("Pressure (hPa)", live_weather["Pressure (hPa)"])
             col6.metric("Visibility (km)", live_weather["Visibility (km)"])
-
-# ---- TAB 2: HISTORICAL DATA ----
-with tab2:
-    st.subheader("📜 Historical Climate Data (1971-Present)")
-    if df is not None:
-        fig_hist = px.line(df, x="ds", y="y", title="📊 Temperature Trends (1971-Present)", labels={"y": "Temperature (°C)"})
-        st.plotly_chart(fig_hist)
-    else:
-        st.warning("📂 Please upload a CSV file.")
 
 # ---- TRAIN MODEL & FORECAST ----
 if df is not None:
@@ -110,8 +96,6 @@ if df is not None:
     future_monthly = forecast.resample("M").mean(numeric_only=True).reset_index()
     future_yearly = forecast.resample("Y").mean(numeric_only=True).reset_index()
 
-    forecast.reset_index(inplace=True)
-
 # ---- TAB 3: MONTHLY FORECAST ----
 with tab3:
     st.subheader("📅 Monthly Climate Forecast (2025–2030)")
@@ -125,41 +109,6 @@ with tab4:
     if df is not None:
         fig_yearly = px.bar(future_yearly, x="ds", y="yhat", title="📊 Predicted Yearly Temperature Trends", labels={"yhat": "Temperature (°C)"})
         st.plotly_chart(fig_yearly)
-
-# ---- TAB 5: EXTREME CONDITIONS & ALERTS ----
-with tab5:
-    st.subheader("🚨 Extreme Climate Alerts & Visualizations")
-    if df is not None:
-        # High temperatures
-        extreme_temps = future_monthly[future_monthly["yhat"] > future_monthly["yhat"].quantile(0.95)]
-        if not extreme_temps.empty:
-            st.error("⚠️ High-Temperature Alert! Unusual spikes detected.")
-            fig_extreme_hot = px.bar(extreme_temps, x="ds", y="yhat", title="🔥 Extreme Heat Predictions", labels={"yhat": "Temperature (°C)"})
-            st.plotly_chart(fig_extreme_hot)
-
-        # Low temperatures
-        extreme_cold = future_monthly[future_monthly["yhat"] < future_monthly["yhat"].quantile(0.05)]
-        if not extreme_cold.empty:
-            st.warning("⚠️ Cold Spell Alert! Sudden drops detected.")
-            fig_extreme_cold = px.bar(extreme_cold, x="ds", y="yhat", title="❄️ Extreme Cold Predictions", labels={"yhat": "Temperature (°C)"})
-            st.plotly_chart(fig_extreme_cold)
-
-# ---- TAB 6: SUMMARY ----
-with tab6:
-    st.subheader("📖 Climate Summary & Predictions")
-    st.markdown("""
-        ### 🔹 **Climate Trends & Insights**
-        - 📜 Historical data analysis since **1971**
-        - 📅 AI-driven forecasts for **2025–2030**
-        - 🚨 Alerts for **extreme temperature fluctuations**
-
-        **Key Observations:**
-        - Rising global temperatures predicted.
-        - Potential increase in extreme weather events.
-        - Need for sustainable actions to mitigate climate change.
-
-        ✅ Stay informed, stay prepared!
-    """)
 
 # ---- FOOTER ----
 st.markdown("🚀 **Developed by AI Climate Team | Powered by WeatherAPI & Streamlit**")
