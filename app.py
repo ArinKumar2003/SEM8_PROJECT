@@ -83,32 +83,37 @@ with tab1:
             col5.metric("Pressure (hPa)", live_weather["Pressure (hPa)"])
             col6.metric("Visibility (km)", live_weather["Visibility (km)"])
 
-# ---- TRAIN MODEL & FORECAST ----
-if df is not None:
-    model = Prophet()
-    model.fit(df)
-    future = model.make_future_dataframe(periods=365 * 5)
-    forecast = model.predict(future)
-
-    forecast["ds"] = pd.to_datetime(forecast["ds"])
-    forecast.set_index("ds", inplace=True)
-
-    future_monthly = forecast.resample("M").mean(numeric_only=True).reset_index()
-    future_yearly = forecast.resample("Y").mean(numeric_only=True).reset_index()
-
-# ---- TAB 3: MONTHLY FORECAST ----
-with tab3:
-    st.subheader("📅 Monthly Climate Forecast (2025–2030)")
+# ---- TAB 2: HISTORICAL DATA ----
+with tab2:
+    st.subheader("📜 Historical Climate Data (1971-Present)")
     if df is not None:
-        fig_monthly = px.line(future_monthly, x="ds", y="yhat", title="📊 Predicted Monthly Temperature Trends", labels={"yhat": "Temperature (°C)"})
-        st.plotly_chart(fig_monthly)
+        fig_hist = px.line(df, x="ds", y="y", title="📊 Temperature Trends (1971-Present)", labels={"y": "Temperature (°C)"})
+        st.plotly_chart(fig_hist)
+    else:
+        st.warning("📂 Please upload a CSV file.")
 
-# ---- TAB 4: YEARLY FORECAST ----
-with tab4:
-    st.subheader("📆 Yearly Climate Forecast (2025–2030)")
+# ---- TAB 5: EXTREME CONDITIONS ----
+with tab5:
+    st.subheader("🚨 Extreme Climate Alerts & Visualizations")
     if df is not None:
-        fig_yearly = px.bar(future_yearly, x="ds", y="yhat", title="📊 Predicted Yearly Temperature Trends", labels={"yhat": "Temperature (°C)"})
-        st.plotly_chart(fig_yearly)
+        st.write("Extreme weather conditions will be displayed here.")
+
+# ---- TAB 6: SUMMARY ----
+with tab6:
+    st.subheader("📖 Climate Summary & Predictions")
+    st.markdown("""
+        ### 🔹 **Climate Trends & Insights**
+        - 📜 Historical data analysis since **1971**
+        - 📅 AI-driven forecasts for **2025–2030**
+        - 🚨 Alerts for **extreme temperature fluctuations**
+
+        **Key Observations:**
+        - Rising global temperatures predicted.
+        - Potential increase in extreme weather events.
+        - Need for sustainable actions to mitigate climate change.
+
+        ✅ Stay informed, stay prepared!
+    """)
 
 # ---- FOOTER ----
 st.markdown("🚀 **Developed by AI Climate Team | Powered by WeatherAPI & Streamlit**")
