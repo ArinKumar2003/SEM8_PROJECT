@@ -68,22 +68,31 @@ if uploaded_file:
         df = None
 
 # ---- TRAIN MODEL & FORECAST ----
+forecast, future_monthly, future_yearly = None, None, None
+
 if df is not None:
-    model = Prophet()
-    model.fit(df)
-    future = model.make_future_dataframe(periods=365 * 5)
-    forecast = model.predict(future)
-    
-    forecast["ds"] = pd.to_datetime(forecast["ds"])
-    forecast.set_index("ds", inplace=True)
-    
-    future_monthly = forecast.resample("M").mean(numeric_only=True).reset_index()
-    future_yearly = forecast.resample("Y").mean(numeric_only=True).reset_index()
-    
-    forecast.reset_index(inplace=True)
+    try:
+        with st.spinner("Training AI Climate Model... ⏳"):
+            model = Prophet()
+            model.fit(df)
+            future = model.make_future_dataframe(periods=365 * 5)
+            forecast = model.predict(future)
+            
+            forecast["ds"] = pd.to_datetime(forecast["ds"])
+            forecast.set_index("ds", inplace=True)
+            
+            future_monthly = forecast.resample("M").mean(numeric_only=True).reset_index()
+            future_yearly = forecast.resample("Y").mean(numeric_only=True).reset_index()
+    except Exception as e:
+        st.error(f"❌ Model training failed: {e}")
+        df = None  
 
 # ---- TABS ----
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Live Weather", "Historical Data", "Monthly Forecast", "Yearly Forecast", "Extreme Conditions", "Summary"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+    "Live Weather", "Historical Data", "Monthly Forecast", "Yearly Forecast", 
+    "Extreme Conditions", "Climate Trends", "AQI Monitoring", 
+    "Heatwaves & Coldwaves", "Global Climate Comparisons", "Summary"
+])
 
 # ---- TAB 1: LIVE WEATHER ----
 with tab1:
@@ -99,11 +108,6 @@ with tab1:
             col1.metric("Temperature (°C)", live_weather["y"])
             col2.metric("Humidity (%)", live_weather["Humidity"])
             col3.metric("CO₂ Level (ppm)", live_weather["CO2"])
-            
-            col4, col5, col6 = st.columns(3)
-            col4.metric("Wind Speed (km/h)", live_weather["Wind Speed (km/h)"])
-            col5.metric("Pressure (hPa)", live_weather["Pressure (hPa)"])
-            col6.metric("Visibility (km)", live_weather["Visibility (km)"])
 
 # ---- TAB 2: HISTORICAL DATA ----
 with tab2:
@@ -111,26 +115,49 @@ with tab2:
     if df is not None:
         fig_hist = px.line(df, x="ds", y="y", title="📊 Temperature Trends (1971-Present)", labels={"y": "Temperature (°C)"})
         st.plotly_chart(fig_hist)
-    else:
-        st.warning("📂 Please upload a CSV file.")
 
-# ---- TAB 5: EXTREME CONDITIONS ----
-with tab5:
-    st.subheader("🚨 Extreme Climate Alerts & Visualizations")
+# ---- TAB 6: CLIMATE TRENDS ----
+with tab6:
+    st.subheader("📈 Climate Trends Analysis")
     if df is not None:
-        extreme_temps = future_monthly[future_monthly["yhat"] > future_monthly["yhat"].quantile(0.95)]
-        if not extreme_temps.empty:
-            st.error("⚠️ High-Temperature Alert! Unusual spikes detected.")
-            fig_extreme_hot = px.bar(extreme_temps, x="ds", y="yhat", title="🔥 Extreme Heat Predictions", labels={"yhat": "Temperature (°C)"})
-            st.plotly_chart(fig_extreme_hot)
+        fig_trends = px.scatter(df, x="ds", y="y", color="CO2", title="🌡️ Climate Change Impact")
+        st.plotly_chart(fig_trends)
+
+# ---- TAB 7: AQI MONITORING ----
+with tab7:
+    st.subheader("🌫️ Air Quality Index (AQI) Monitoring")
+    if df is not None:
+        fig_aqi = px.line(df, x="ds", y="CO2", title="📊 CO2 Emissions Over Time")
+        st.plotly_chart(fig_aqi)
+
+# ---- TAB 8: HEATWAVES & COLDWAVES ----
+with tab8:
+    st.subheader("🔥 Heatwave & ❄️ Coldwave Detection")
+    if future_monthly is not None:
+        high_temps = future_monthly[future_monthly["yhat"] > future_monthly["yhat"].quantile(0.95)]
+        low_temps = future_monthly[future_monthly["yhat"] < future_monthly["yhat"].quantile(0.05)]
         
-        extreme_cold = future_monthly[future_monthly["yhat"] < future_monthly["yhat"].quantile(0.05)]
-        if not extreme_cold.empty:
-            st.warning("⚠️ Cold Spell Alert! Sudden drops detected.")
-            fig_extreme_cold = px.bar(extreme_cold, x="ds", y="yhat", title="❄️ Extreme Cold Predictions", labels={"yhat": "Temperature (°C)"})
-            st.plotly_chart(fig_extreme_cold)
-    else:
-        st.warning("📂 Please upload a CSV file.")
+        if not high_temps.empty:
+            st.error("⚠️ Heatwave Alert! Extreme temperatures detected.")
+            fig_heatwave = px.line(high_temps, x="ds", y="yhat", title="🔥 Heatwave Trends")
+            st.plotly_chart(fig_heatwave)
+
+# ---- TAB 9: GLOBAL CLIMATE COMPARISON ----
+with tab9:
+    st.subheader("🌍 Compare Climate Across Cities")
+    city1, city2 = st.columns(2)
+    city1_name = city1.text_input("City 1", "New York")
+    city2_name = city2.text_input("City 2", "London")
+
+    if st.button("Compare Climate"):
+        weather1 = get_live_weather(city1_name)
+        weather2 = get_live_weather(city2_name)
+        if weather1 and weather2:
+            data = pd.DataFrame([
+                {"City": city1_name, "Temp (°C)": weather1["y"]},
+                {"City": city2_name, "Temp (°C)": weather2["y"]}
+            ])
+            st.bar_chart(data.set_index("City"))
 
 # ---- FOOTER ----
 st.markdown("🚀 **Developed by AI Climate Team | Powered by WeatherAPI & Streamlit**")
