@@ -80,7 +80,7 @@ if df is not None:
     future_monthly = forecast.resample("M").mean(numeric_only=True).reset_index()
     future_yearly = forecast.resample("Y").mean(numeric_only=True).reset_index()
 
-# ---- TABS: GROUP 1 (1-6) ----
+# ---- TABS ----
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "Live Weather", "Historical Data", "Monthly Forecast", 
     "Yearly Forecast", "Extreme Conditions", "Climate Trends"
@@ -116,6 +116,24 @@ with tab2:
     else:
         st.warning("📂 Please upload a CSV file.")
 
+# ---- TAB 3: MONTHLY FORECAST ----
+with tab3:
+    st.subheader("📅 Monthly Climate Forecast")
+    if df is not None:
+        fig_monthly = px.line(future_monthly, x="ds", y="yhat", title="📈 Predicted Monthly Temperature", labels={"yhat": "Temperature (°C)"})
+        st.plotly_chart(fig_monthly)
+    else:
+        st.warning("📂 Please upload a CSV file.")
+
+# ---- TAB 4: YEARLY FORECAST ----
+with tab4:
+    st.subheader("📆 Yearly Climate Predictions (Next 5 Years)")
+    if df is not None:
+        fig_yearly = px.line(future_yearly, x="ds", y="yhat", title="📊 Predicted Yearly Temperature", labels={"yhat": "Temperature (°C)"})
+        st.plotly_chart(fig_yearly)
+    else:
+        st.warning("📂 Please upload a CSV file.")
+
 # ---- TAB 5: EXTREME CONDITIONS ----
 with tab5:
     st.subheader("🚨 Extreme Climate Alerts & Visualizations")
@@ -131,31 +149,14 @@ with tab5:
             fig_extreme_cold = px.bar(extreme_cold, x="ds", y="yhat", title="❄️ Extreme Cold Predictions", labels={"yhat": "Temperature (°C)"})
             st.plotly_chart(fig_extreme_cold)
 
-# ---- TABS: GROUP 2 (7-10) ----
-tab7, tab8, tab9, tab10 = st.tabs([
-    "AQI Monitoring", "Heatwaves & Coldwaves", 
-    "Global Climate Comparisons", "Summary"
-])
-
-# ---- TAB 7: AQI MONITORING ----
-with tab7:
-    st.subheader("🌫️ Air Quality Index (AQI) Monitoring")
-    st.write("📊 CO2 Emissions & Pollution Trends Over Time.")
-
-# ---- TAB 8: HEATWAVES & COLDWAVES ----
-with tab8:
-    st.subheader("🔥 Heatwave & ❄️ Coldwave Detection")
-    st.write("🚨 Detecting Extreme Climate Events.")
-
-# ---- TAB 9: GLOBAL CLIMATE COMPARISON ----
-with tab9:
-    st.subheader("🌍 Compare Climate Across Cities")
-    st.write("Compare the weather & climate conditions of different cities worldwide.")
-
-# ---- TAB 10: SUMMARY ----
-with tab10:
-    st.subheader("📜 Climate Summary & Insights")
-    st.write("📢 Final insights, trends, and future climate projections.")
+# ---- TAB 6: CLIMATE TRENDS ----
+with tab6:
+    st.subheader("📈 Climate Change & Global Warming Trends")
+    if df is not None:
+        fig_trend = px.line(forecast, x=forecast.index, y="yhat", title="🌍 Climate Change Trends", labels={"yhat": "Temperature (°C)"})
+        st.plotly_chart(fig_trend)
+    else:
+        st.warning("📂 Please upload a CSV file.")
 
 # ---- FOOTER ----
 st.markdown("🚀 **Developed by AI Climate Team | Powered by WeatherAPI & Streamlit**")
