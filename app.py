@@ -15,9 +15,8 @@ st.markdown("<h3 style='text-align: center;'>📊 Live & Historical Climate Anal
 # ---- WEATHER API CONFIG ----
 API_KEY = st.secrets["WEATHERAPI_KEY"] if "WEATHERAPI_KEY" in st.secrets else None  
 
-@st.cache_data()
+@st.cache_data(ttl=600)
 def get_live_weather(city):
-    """Fetch real-time weather data from WeatherAPI.com."""
     if not API_KEY:
         st.error("❌ API Key is missing! Please check your Streamlit secrets.")
         return None
@@ -69,14 +68,13 @@ if uploaded_file:
 
 # ---- TRAIN MODEL & FORECAST ----
 if df is not None:
-    model = Prophet()
+    model = Prophet(seasonality_mode="multiplicative")
+    model.add_seasonality(name='monthly', period=30.5, fourier_order=5)
     model.fit(df)
     future = model.make_future_dataframe(periods=365 * 5)
     forecast = model.predict(future)
-    
     forecast["ds"] = pd.to_datetime(forecast["ds"])
     forecast.set_index("ds", inplace=True)
-    
     future_monthly = forecast.resample("M").mean(numeric_only=True).reset_index()
     future_yearly = forecast.resample("Y").mean(numeric_only=True).reset_index()
 
@@ -96,64 +94,31 @@ with tab1:
             st.write(f"### {city}: {live_weather['Condition']}")
             st.image(f"https:{live_weather['Icon']}", width=80)
             
-            # Display weather metrics
             col1, col2, col3 = st.columns(3)
             col1.metric("Temperature (°C)", live_weather["y"])
             col2.metric("Humidity (%)", live_weather["Humidity"])
             col3.metric("CO₂ Level (ppm)", live_weather["CO2"])
             
-            col4, col5, col6 = st.columns(3)
-            col4.metric("Wind Speed (km/h)", live_weather["Wind Speed (km/h)"])
-            col5.metric("Pressure (hPa)", live_weather["Pressure (hPa)"])
-            col6.metric("Visibility (km)", live_weather["Visibility (km)"])
+            fig_gauge = px.indicator(value=live_weather["y"], title="Current Temperature (°C)")
+            st.plotly_chart(fig_gauge)
 
 # ---- TAB 2: HISTORICAL DATA ----
 with tab2:
     st.subheader("📜 Historical Climate Data (1971-Present)")
+    selected_years = st.sidebar.slider("Select Year Range", 1971, 2030, (2000, 2025))
     if df is not None:
-        fig_hist = px.line(df, x="ds", y="y", title="📊 Temperature Trends (1971-Present)", labels={"y": "Temperature (°C)"})
+        df_filtered = df[(df["ds"].dt.year >= selected_years[0]) & (df["ds"].dt.year <= selected_years[1])]
+        fig_hist = px.line(df_filtered, x="ds", y="y", title="📊 Temperature Trends", labels={"y": "Temperature (°C)"})
         st.plotly_chart(fig_hist)
     else:
         st.warning("📂 Please upload a CSV file.")
-
-# ---- TAB 3: MONTHLY FORECAST ----
-with tab3:
-    st.subheader("📅 Monthly Climate Forecast")
-    if df is not None:
-        fig_monthly = px.line(future_monthly, x="ds", y="yhat", title="📈 Predicted Monthly Temperature", labels={"yhat": "Temperature (°C)"})
-        st.plotly_chart(fig_monthly)
-    else:
-        st.warning("📂 Please upload a CSV file.")
-
-# ---- TAB 4: YEARLY FORECAST ----
-with tab4:
-    st.subheader("📆 Yearly Climate Predictions (Next 5 Years)")
-    if df is not None:
-        fig_yearly = px.line(future_yearly, x="ds", y="yhat", title="📊 Predicted Yearly Temperature", labels={"yhat": "Temperature (°C)"})
-        st.plotly_chart(fig_yearly)
-    else:
-        st.warning("📂 Please upload a CSV file.")
-
-# ---- TAB 5: EXTREME CONDITIONS ----
-with tab5:
-    st.subheader("🚨 Extreme Climate Alerts & Visualizations")
-    if df is not None:
-        extreme_temps = future_monthly[future_monthly["yhat"] > future_monthly["yhat"].quantile(0.95)]
-        if not extreme_temps.empty:
-            st.error("⚠️ High-Temperature Alert! Unusual spikes detected.")
-            fig_extreme_hot = px.bar(extreme_temps, x="ds", y="yhat", title="🔥 Extreme Heat Predictions", labels={"yhat": "Temperature (°C)"})
-            st.plotly_chart(fig_extreme_hot)
-        extreme_cold = future_monthly[future_monthly["yhat"] < future_monthly["yhat"].quantile(0.05)]
-        if not extreme_cold.empty:
-            st.warning("⚠️ Cold Spell Alert! Sudden drops detected.")
-            fig_extreme_cold = px.bar(extreme_cold, x="ds", y="yhat", title="❄️ Extreme Cold Predictions", labels={"yhat": "Temperature (°C)"})
-            st.plotly_chart(fig_extreme_cold)
 
 # ---- TAB 6: CLIMATE TRENDS ----
 with tab6:
     st.subheader("📈 Climate Change & Global Warming Trends")
     if df is not None:
-        fig_trend = px.line(forecast, x=forecast.index, y="yhat", title="🌍 Climate Change Trends", labels={"yhat": "Temperature (°C)"})
+        fig_trend = px.line(forecast, x=forecast.index, y=["yhat", "yhat_lower", "yhat_upper"], 
+                            title="🌍 Climate Change Trends", labels={"yhat": "Temperature (°C)"})
         st.plotly_chart(fig_trend)
     else:
         st.warning("📂 Please upload a CSV file.")
