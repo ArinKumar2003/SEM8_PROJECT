@@ -79,49 +79,31 @@ if df is not None:
     future_yearly = forecast.resample("Y").mean(numeric_only=True).reset_index()
 
 # ---- TABS ----
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "Live Weather", "Historical Data", "Monthly Forecast", 
-    "Yearly Forecast", "Extreme Conditions", "Climate Trends"
+    "Yearly Forecast", "Extreme Conditions", "Climate Trends", "Climate Summary & Actions"
 ])
 
-# ---- TAB 1: LIVE WEATHER ----
-with tab1:
-    st.subheader("🌍 Live Weather Data")
-    city = st.text_input("Enter City", "New York")
-    if st.button("Fetch Live Weather"):
-        live_weather = get_live_weather(city)
-        if live_weather:
-            st.write(f"### {city}: {live_weather['Condition']}")
-            st.image(f"https:{live_weather['Icon']}", width=80)
-            
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Temperature (°C)", live_weather["y"])
-            col2.metric("Humidity (%)", live_weather["Humidity"])
-            col3.metric("CO₂ Level (ppm)", live_weather["CO2"])
-            
-            fig_gauge = px.indicator(value=live_weather["y"], title="Current Temperature (°C)")
-            st.plotly_chart(fig_gauge)
-
-# ---- TAB 2: HISTORICAL DATA ----
-with tab2:
-    st.subheader("📜 Historical Climate Data (1971-Present)")
-    selected_years = st.sidebar.slider("Select Year Range", 1971, 2030, (2000, 2025))
+# ---- TAB 7: CLIMATE SUMMARY & ACTIONS ----
+with tab7:
+    st.subheader("🌏 Climate Summary & Recommended Actions")
     if df is not None:
-        df_filtered = df[(df["ds"].dt.year >= selected_years[0]) & (df["ds"].dt.year <= selected_years[1])]
-        fig_hist = px.line(df_filtered, x="ds", y="y", title="📊 Temperature Trends", labels={"y": "Temperature (°C)"})
-        st.plotly_chart(fig_hist)
+        avg_temp = df["y"].mean()
+        avg_co2 = df["CO2"].mean()
+        avg_humidity = df["Humidity"].mean()
+        
+        st.write(f"### 🌡️ Average Temperature: {avg_temp:.2f}°C")
+        st.write(f"### 🌿 Average CO₂ Levels: {avg_co2:.2f} ppm")
+        st.write(f"### 💧 Average Humidity: {avg_humidity:.2f}%")
+        
+        if avg_temp > 30:
+            st.error("⚠️ High temperatures detected. Consider reducing carbon emissions and increasing green cover.")
+        if avg_co2 > 400:
+            st.warning("⚠️ Elevated CO₂ levels. Encourage the use of renewable energy and carbon capture technologies.")
+        if avg_humidity < 30:
+            st.info("💡 Dry conditions detected. Promote water conservation and afforestation efforts.")
     else:
-        st.warning("📂 Please upload a CSV file.")
-
-# ---- TAB 6: CLIMATE TRENDS ----
-with tab6:
-    st.subheader("📈 Climate Change & Global Warming Trends")
-    if df is not None:
-        fig_trend = px.line(forecast, x=forecast.index, y=["yhat", "yhat_lower", "yhat_upper"], 
-                            title="🌍 Climate Change Trends", labels={"yhat": "Temperature (°C)"})
-        st.plotly_chart(fig_trend)
-    else:
-        st.warning("📂 Please upload a CSV file.")
+        st.warning("📂 Please upload a CSV file for climate insights.")
 
 # ---- FOOTER ----
 st.markdown("🚀 **Developed by AI Climate Team | Powered by WeatherAPI & Streamlit**")
