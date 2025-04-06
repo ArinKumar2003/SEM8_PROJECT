@@ -4,108 +4,107 @@ from prophet import Prophet
 from prophet.plot import plot_plotly
 import plotly.express as px
 import requests
+from io import StringIO
 
-# ----------------------------
-# CONFIGURATION
-# ----------------------------
-WEATHERSTACK_API_KEY = "YOUR_API_KEY_HERE"  # ⬅️ Replace with your actual API key
+# -----------------------------
+# Set up the Streamlit layout
+st.set_page_config(page_title="📊 Weather Dashboard", layout="wide")
+st.title("🌦️ Enhanced Weather Dashboard")
 
-st.set_page_config(page_title="🌍 Weather Dashboard", layout="wide")
+# -----------------------------
+# Sidebar navigation
+st.sidebar.title("Navigation")
+tab = st.sidebar.radio("Go to", ["📈 Upload & Forecast", "🌍 Live Weather", "📊 Raw Data"])
 
-# ----------------------------
-# LOAD CLEANED DATA
-# ----------------------------
-@st.cache_data
-def load_data():
-    df = pd.read_csv("cleaned_weather.csv")
-    df['ds'] = pd.to_datetime(df['ds'])
-    df = df[['ds', 'y']].dropna()
-    return df
+# -----------------------------
+# Weatherstack API Key (replace with your actual key)
+API_KEY = st.secrets["weatherstack"]["api_key"]
 
-# ----------------------------
-# GET LIVE WEATHER FROM API
-# ----------------------------
+# -----------------------------
+# Weatherstack live weather fetcher
 def get_live_weather(city):
-    url = f"http://api.weatherstack.com/current?access_key={WEATHERSTACK_API_KEY}&query={city}"
-    try:
-        response = requests.get(url)
+    url = f"http://api.weatherstack.com/current?access_key={API_KEY}&query={city}"
+    response = requests.get(url)
+    if response.status_code == 200:
         data = response.json()
         if "current" in data:
             return {
-                "temperature": data["current"]["temperature"],
-                "weather": data["current"]["weather_descriptions"][0],
-                "humidity": data["current"]["humidity"],
-                "wind_speed": data["current"]["wind_speed"],
-                "icon": data["current"]["weather_icons"][0]
+                "Temperature (°C)": data["current"]["temperature"],
+                "Weather Description": data["current"]["weather_descriptions"][0],
+                "Humidity (%)": data["current"]["humidity"],
+                "Wind Speed (km/h)": data["current"]["wind_speed"],
+                "Observation Time": data["current"]["observation_time"]
             }
-    except Exception as e:
-        return None
-    return None
-
-# ----------------------------
-# UI LAYOUT WITH TABS
-# ----------------------------
-st.title("🌤️ Global Weather Intelligence Dashboard")
-
-tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📈 Forecasting", "🌍 Live Weather"])
-
-# ----------------------------
-# TAB 1: Dashboard
-# ----------------------------
-with tab1:
-    st.subheader("Historical Weather Overview")
-    df = load_data()
-
-    with st.expander("📁 Raw Data Preview"):
-        st.dataframe(df.head(20))
-
-    st.markdown("### 🌡️ Temperature Trend Over Time")
-    fig = px.line(df, x='ds', y='y', labels={'ds': 'Date', 'y': 'Temperature (°C)'})
-    st.plotly_chart(fig, use_container_width=True)
-
-# ----------------------------
-# TAB 2: Forecasting with Prophet
-# ----------------------------
-with tab2:
-    st.subheader("📈 Forecast Temperature")
-    df = load_data()
-
-    # Slider for forecast duration
-    periods_input = st.slider("Select forecast days", min_value=7, max_value=90, value=30)
-
-    model = Prophet()
-    model.fit(df)
-
-    future = model.make_future_dataframe(periods=periods_input)
-    forecast = model.predict(future)
-
-    st.markdown("### 🔮 Forecast Plot")
-    fig1 = plot_plotly(model, forecast)
-    st.plotly_chart(fig1, use_container_width=True)
-
-    with st.expander("📊 Forecast Data"):
-        st.dataframe(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(periods_input))
-
-    st.markdown("### 🧩 Forecast Components")
-    fig2 = model.plot_components(forecast)
-    st.write(fig2)
-
-# ----------------------------
-# TAB 3: Live Weather
-# ----------------------------
-with tab3:
-    st.subheader("🌍 Live Weather Information")
-    city = st.text_input("Enter a city name:", "New York")
-
-    if st.button("Get Weather"):
-        weather = get_live_weather(city)
-        if weather:
-            col1, col2 = st.columns([1, 4])
-            with col1:
-                st.image(weather['icon'], width=80)
-            with col2:
-                st.markdown(f"### 🌡️ {weather['temperature']}°C — {weather['weather']}")
-                st.markdown(f"💧 **Humidity**: {weather['humidity']}%")
-                st.markdown(f"🌬️ **Wind Speed**: {weather['wind_speed']} km/h")
         else:
-            st.error("Failed to fetch weather data. Please check the city name or your API key.")
+            return {"Error": "City not found or data missing."}
+    else:
+        return {"Error": "Failed to connect to API."}
+
+# -----------------------------
+# Forecast Tab
+if tab == "📈 Upload & Forecast":
+    st.subheader("Upload a Weather Dataset for Forecasting")
+
+    uploaded_file = st.file_uploader("Upload CSV (must contain 'ds' for date and 'y' for temperature)", type="csv")
+
+    if uploaded_file:
+        try:
+            df = pd.read_csv(uploaded_file)
+
+            if 'ds' not in df.columns or 'y' not in df.columns:
+                st.error("CSV must contain 'ds' and 'y' columns.")
+            else:
+                df['ds'] = pd.to_datetime(df['ds'])
+                df = df[['ds', 'y']].dropna()
+
+                st.success("File successfully uploaded and processed.")
+                st.write("Preview of Data:", df.head())
+
+                forecast_days = st.slider("Select forecast horizon (days)", 7, 90, 30)
+
+                model = Prophet()
+                model.fit(df)
+
+                future = model.make_future_dataframe(periods=forecast_days)
+                forecast = model.predict(future)
+
+                st.subheader("📉 Forecast Plot")
+                fig1 = plot_plotly(model, forecast)
+                st.plotly_chart(fig1, use_container_width=True)
+
+                st.subheader("📋 Forecast Data (tail)")
+                st.write(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail())
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+    else:
+        st.info("Please upload a CSV file to continue.")
+
+# -----------------------------
+# Live Weather Tab
+elif tab == "🌍 Live Weather":
+    st.subheader("Live Weather via Weatherstack API")
+    city = st.text_input("Enter a city name", "New York")
+
+    if st.button("Get Live Weather"):
+        weather = get_live_weather(city)
+        if "Error" in weather:
+            st.error(weather["Error"])
+        else:
+            st.success(f"Current Weather in {city}")
+            st.json(weather)
+
+# -----------------------------
+# Raw Data Viewer Tab
+elif tab == "📊 Raw Data":
+    st.subheader("View Uploaded CSV Data")
+    raw_file = st.file_uploader("Upload CSV to preview its content", type="csv", key="raw")
+
+    if raw_file:
+        try:
+            raw_df = pd.read_csv(raw_file)
+            st.write("Preview of Raw Data", raw_df.head())
+            st.dataframe(raw_df)
+        except Exception as e:
+            st.error(f"Failed to read file: {e}")
+    else:
+        st.info("Upload a CSV file to view it here.")
