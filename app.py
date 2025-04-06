@@ -1,93 +1,104 @@
 import streamlit as st
 import pandas as pd
 import requests
+import plotly.express as px
 from prophet import Prophet
 from prophet.plot import plot_plotly
-import plotly.express as px
+from datetime import datetime
+import os
+from dotenv import load_dotenv
 
-st.set_page_config(page_title="Weather App", layout="wide")
+# Load API key
+load_dotenv()
+API_KEY = os.getenv("WEATHERSTACK_API_KEY") or "YOUR_API_KEY_HERE"
 
-st.title("🌤️ Weather Forecast Dashboard")
+# Load data
+@st.cache_data
+def load_data():
+    df = pd.read_csv("GlobalWeatherRepository.csv")
+    df['last_updated'] = pd.to_datetime(df['last_updated'])
+    return df
 
-# Create tabs
-tab1, tab2, tab3 = st.tabs(["Live Weather", "Forecast", "About"])
+df = load_data()
 
-# ---- TAB 1: LIVE WEATHER ----
-with tab1:
-    st.subheader("🌦️ Live Weather Report")
-    city = st.text_input("Enter a city name", "New York")
-    api_key = st.secrets["weatherstack"]["api_key"]  # Store this in .streamlit/secrets.toml
+# Streamlit config
+st.set_page_config(page_title="🌎 Weather Dashboard", layout="wide")
 
-    if st.button("Get Weather"):
-        url = f"http://api.weatherstack.com/current?access_key={api_key}&query={city}"
-        try:
-            res = requests.get(url)
-            res.raise_for_status()
-            weather_data = res.json()
+st.sidebar.title("🌐 Weather Dashboard")
+tab = st.sidebar.radio("Select Tab", ["Live Weather", "Historical Trends", "Forecast", "Map View", "Raw Data"])
 
-            if 'current' not in weather_data:
-                raise Exception("Invalid response")
+# Sidebar Filters
+country = st.sidebar.selectbox("🌍 Select Country", sorted(df['country'].dropna().unique()))
+city_list = sorted(df[df['country'] == country]['location_name'].dropna().unique())
+city = st.sidebar.selectbox("🏙️ Select City", city_list)
 
-            temp = weather_data['current']['temperature']
-            desc = weather_data['current']['weather_descriptions'][0]
-            humidity = weather_data['current']['humidity']
-            wind = weather_data['current']['wind_speed']
+filtered_df = df[(df['country'] == country) & (df['location_name'] == city)].copy().sort_values('last_updated')
 
-            st.metric(label="🌡️ Temperature (°C)", value=temp)
-            st.metric(label="🌤️ Description", value=desc)
-            st.metric(label="💧 Humidity", value=f"{humidity}%")
-            st.metric(label="🌬️ Wind Speed", value=f"{wind} km/h")
-        except:
-            st.error("Could not retrieve weather data. Check your API key or city name.")
+# LIVE WEATHER (Weatherstack)
+if tab == "Live Weather":
+    st.title(f"🌤️ Live Weather for {city}, {country}")
 
-# ---- TAB 2: FORECASTING ----
-with tab2:
-    st.subheader("📈 Forecasting Weather Data")
+    def get_live_weather(city):
+        url = f"http://api.weatherstack.com/current?access_key={API_KEY}&query={city}"
+        res = requests.get(url)
+        if res.status_code == 200:
+            return res.json()
+        return None
 
-    uploaded_file = st.file_uploader("Upload your CSV file (must contain 'ds' and 'y' columns)", type=["csv"])
+    data = get_live_weather(city)
 
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
+    if data and "current" in data:
+        current = data["current"]
+        location = data["location"]
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("🌡️ Temperature", f"{current['temperature']} °C")
+        col2.metric("💧 Humidity", f"{current['humidity']} %")
+        col3.metric("🌬️ Wind Speed", f"{current['wind_speed']} km/h")
 
-        # Ensure 'ds' and 'y' columns exist
-        if 'ds' not in df.columns or 'y' not in df.columns:
-            st.error("CSV must contain 'ds' and 'y' columns (date and value).")
-        else:
-            df['ds'] = pd.to_datetime(df['ds'])
+        col4, col5, col6 = st.columns(3)
+        col4.metric("🌥️ Condition", current['weather_descriptions'][0])
+        col5.metric("📊 Pressure", f"{current['pressure']} hPa")
+        col6.metric("📍 Coordinates", f"{location['lat']}, {location['lon']}")
 
-            st.write("📊 Uploaded Data", df.tail())
+    else:
+        st.error("❌ Could not fetch data from Weatherstack. Check your API key or city name.")
 
-            period = st.slider("Select forecast period (days)", min_value=1, max_value=365, value=30)
+# HISTORICAL TRENDS
+elif tab == "Historical Trends":
+    st.title(f"📈 Historical Trends in {city}")
 
-            # Prophet model
-            model = Prophet()
-            model.fit(df)
+    metric = st.selectbox("Metric", ['temperature_celsius', 'humidity', 'pressure_mb', 'wind_kph', 'uv_index'])
+    fig = px.line(filtered_df, x='last_updated', y=metric, title=f"{metric.replace('_', ' ').title()} Over Time")
+    st.plotly_chart(fig, use_container_width=True)
 
-            future = model.make_future_dataframe(periods=period)
-            forecast = model.predict(future)
+# FORECAST TAB
+elif tab == "Forecast":
+    st.title(f"🔮 Forecasting for {city}")
 
-            st.write("📈 Forecast Data", forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail())
+    metric = st.selectbox("Select Metric to Forecast", ['temperature_celsius', 'humidity', 'pressure_mb'])
 
-            fig1 = plot_plotly(model, forecast)
-            st.plotly_chart(fig1)
+    if len(filtered_df) >= 20:
+        prophet_df = filtered_df[['last_updated', metric]].rename(columns={"last_updated": "ds", metric: "y"})
+        model = Prophet()
+        model.fit(prophet_df)
+        future = model.make_future_dataframe(periods=24, freq='H')
+        forecast = model.predict(future)
+        forecast_fig = plot_plotly(model, forecast)
+        st.plotly_chart(forecast_fig, use_container_width=True)
+    else:
+        st.warning("Not enough data to generate a forecast.")
 
-            fig2 = px.line(forecast, x='ds', y='yhat', title='Forecasted Values Over Time')
-            st.plotly_chart(fig2)
+# MAP VIEW
+elif tab == "Map View":
+    st.title("🗺️ Weather Map")
+    if 'latitude' in df.columns and 'longitude' in df.columns:
+        map_df = df[['location_name', 'latitude', 'longitude', 'temperature_celsius']].dropna()
+        st.map(map_df)
+    else:
+        st.warning("No latitude/longitude data available.")
 
-# ---- TAB 3: ABOUT ----
-with tab3:
-    st.subheader("ℹ️ About This App")
-    st.markdown("""
-        This app lets you:
-        - 🌦️ View **real-time weather** using Weatherstack API  
-        - 📈 Upload historical weather data and generate **forecast** using Facebook Prophet  
-        - 🔍 Built using **Streamlit**, **Plotly**, and **Prophet**
-
-        **Note**: The uploaded CSV must contain:
-        - `ds`: Date column  
-        - `y`: Value to forecast (e.g., temperature)
-
-        ---
-        Created with ❤️ by You!
-    """)
-
+# RAW DATA
+elif tab == "Raw Data":
+    st.title("📄 Raw Weather Data")
+    st.dataframe(filtered_df, use_container_width=True)
