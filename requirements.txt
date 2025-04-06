@@ -10,3 +10,4 @@ seaborn
 prophet
 streamlit_echarts 
 statsmodels
+dotenv
