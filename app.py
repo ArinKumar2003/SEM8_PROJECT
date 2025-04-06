@@ -33,7 +33,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(TAB_NAMES)
 with tab1:
     st.subheader("🌦️ Live Weather Report")
     city = st.text_input("Enter a city name", "New York")
-    api_key = "YOUR_OPENWEATHERMAP_API_KEY"  # Replace with your API key
+    api_key = st.secrets["weatherstack"]["api_key"]  # Replace with your API key
     if st.button("Get Weather"):
         url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric"
         try:
