@@ -12,3 +12,4 @@ streamlit_echarts
 statsmodels
 dotenv
 streamlit_option_menu
+streamlit_extras.metric_cards
