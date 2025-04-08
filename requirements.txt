@@ -11,3 +11,4 @@ prophet
 streamlit_echarts 
 statsmodels
 dotenv
+streamlit_option_menu
