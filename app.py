@@ -6,7 +6,7 @@ from datetime import datetime
 st.set_page_config(page_title="Climate Insights Dashboard", layout="wide")
 
 # --- Secrets ---
-API_KEY = st.secrets["WEATHERAPI_KEY"]
+API_KEY = st.secrets["api_key"]
 
 # --- Title ---
 st.markdown("# 🌍 Climate Insights Dashboard")
