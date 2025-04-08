@@ -6,12 +6,16 @@ from datetime import datetime
 import requests
 from streamlit_option_menu import option_menu
 
-# Page config
+# Set page config
 st.set_page_config("🌎 Global Climate Dashboard", layout="wide")
 
 # Weather API
 WEATHER_API_KEY = st.secrets["weatherapi"]["api_key"]
 WEATHER_API_URL = "http://api.weatherapi.com/v1/current.json"
+
+# Header
+st.markdown("<h1 style='text-align: center; color: #4e8cff;'>🌍 Global Climate Dashboard</h1>", unsafe_allow_html=True)
+st.markdown("<h4 style='text-align: center;'>Visualize weather patterns, forecast climate trends, and raise awareness 🌡🌱</h4><hr>", unsafe_allow_html=True)
 
 # File uploader
 uploaded_file = st.sidebar.file_uploader("📂 Upload Climate Dataset (CSV)", type=["csv"])
@@ -48,7 +52,7 @@ if uploaded_file is not None:
         except:
             return None
 
-    # Tabs
+    # Navigation Tabs
     selected = option_menu(
         None,
         ["Live Weather", "Forecast", "Visualization", "Map View", "Monthly Summary", "Climate Awareness"],
@@ -56,9 +60,9 @@ if uploaded_file is not None:
         orientation="horizontal"
     )
 
-    # Tab: Live Weather
+    # ===== LIVE WEATHER TAB =====
     if selected == "Live Weather":
-        st.subheader("☁️ Live Weather")
+        st.markdown("## ☁️ Live Weather Conditions")
         city = st.text_input("Enter City", "New York")
         if city:
             weather = get_live_weather(city)
@@ -72,41 +76,40 @@ if uploaded_file is not None:
                 with col2:
                     st.image("http:" + weather["icon"], width=100)
 
-    # Tab: Forecast
+    # ===== FORECAST TAB =====
     elif selected == "Forecast":
-        st.subheader("📈 Climate Forecast (Temperature)")
+        st.markdown("## 📈 Forecast Temperature Using Prophet")
         if city_filter_enabled:
-            selected_city = st.selectbox("Select City for Forecast", cities)
+            selected_city = st.selectbox("Select City", cities)
             df_city = df[df['city'] == selected_city]
         else:
             df_city = df
 
         df_prophet = df_city[["ds", "temperature"]].rename(columns={"temperature": "y"})
-        periods = st.slider("Days to Forecast", 7, 180, 30)
+        periods = st.slider("Forecast Days", 7, 180, 30)
 
         model = Prophet()
         model.fit(df_prophet)
         future = model.make_future_dataframe(periods=periods)
         forecast = model.predict(future)
 
-        fig = px.line(forecast, x='ds', y='yhat', title=f"Temperature Forecast")
+        fig = px.line(forecast, x='ds', y='yhat', title=f"{selected_city if city_filter_enabled else ''} Temperature Forecast")
         st.plotly_chart(fig, use_container_width=True)
+        st.download_button("📩 Download Forecast CSV", forecast.to_csv(index=False), "forecast.csv")
 
-        st.download_button("Download Forecast CSV", forecast.to_csv(index=False), "forecast.csv")
-
-    # Tab: Visualization
+    # ===== VISUALIZATION TAB =====
     elif selected == "Visualization":
-        st.subheader("📊 Explore Climate Data")
+        st.markdown("## 📊 Climate Variable Over Time")
         selected_column = st.selectbox("Choose Variable", df.select_dtypes('number').columns)
-        fig = px.line(df, x="ds", y=selected_column, title=f"{selected_column} over Time")
+        fig = px.line(df, x="ds", y=selected_column, title=f"{selected_column.title()} Over Time")
         st.plotly_chart(fig, use_container_width=True)
-        st.download_button("Download Dataset", df.to_csv(index=False), "climate_data.csv")
+        st.download_button("📩 Download Full Dataset", df.to_csv(index=False), "climate_data.csv")
 
-    # Tab: Map View
+    # ===== MAP TAB =====
     elif selected == "Map View":
-        st.subheader("🗺 Climate Variables on Map")
+        st.markdown("## 🗺 Climate Map Visualization")
         if "latitude" in df.columns and "longitude" in df.columns:
-            variable = st.selectbox("Choose Variable", ["temperature", "humidity", "wind_speed"])
+            variable = st.selectbox("Select Variable", ["temperature", "humidity", "wind_speed"])
             latest = df.sort_values("ds").dropna(subset=[variable])
             latest = latest.groupby("city", as_index=False).last()
 
@@ -116,33 +119,35 @@ if uploaded_file is not None:
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("Latitude and Longitude columns are required for map view.")
+            st.warning("🌍 Your data must include 'latitude' and 'longitude' columns.")
 
-    # Tab: Monthly Summary
+    # ===== MONTHLY SUMMARY TAB =====
     elif selected == "Monthly Summary":
-        st.subheader("📅 Monthly Climate Summary")
+        st.markdown("## 📅 Monthly Climate Averages")
         df['month'] = df['ds'].dt.to_period('M').astype(str)
         metric = st.selectbox("Select Metric", ["temperature", "humidity", "wind_speed"])
         summary = df.groupby('month')[metric].mean().reset_index()
-        fig = px.bar(summary, x='month', y=metric, title=f"Monthly Avg {metric.title()}")
+        fig = px.bar(summary, x='month', y=metric, title=f"Monthly Average {metric.title()}")
         st.plotly_chart(fig, use_container_width=True)
 
-    # Tab: Awareness
+    # ===== CLIMATE AWARENESS TAB =====
     elif selected == "Climate Awareness":
-        st.subheader("🌱 Climate Summary & Awareness")
+        st.markdown("## 🌱 Climate Summary & Awareness")
         st.markdown("""
-        ### 🔍 Key Climate Stats
-        - 🌡 **Global temps rising ~1.1°C**
-        - ❄ Arctic sea ice shrinking **13%/decade**
-        - 🌊 Sea levels have risen ~8 inches
+        ### 🌡 Global Climate Quick Facts
+        - 🌍 Earth's temp has risen ~1.1°C since 1880.
+        - 🌊 Sea levels have risen ~20 cm since 1900.
+        - ❄ Arctic ice is shrinking ~13% per decade.
 
-        ### 🌍 What You Can Do
-        - 🚴 Use public transport
-        - 💡 Reduce energy use
-        - 🥕 Eat less meat
-        - 🌳 Plant trees
+        ### 💡 Simple Actions That Help
+        - 🚲 Use bicycles or public transport.
+        - 💡 Switch to energy-saving bulbs.
+        - 🥬 Choose local & plant-based foods.
+        - 🌳 Support reforestation projects.
 
-        > _“There is no Planet B.”_
+        > _"The climate is changing. So should we."_ – United Nations
         """)
+
 else:
-    st.info("📂 Please upload a climate dataset to get started.")
+    st.info("📂 Please upload a valid climate dataset to begin using the dashboard.")
+
