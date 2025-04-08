@@ -1,153 +1,129 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-from prophet import Prophet
-from datetime import datetime
 import requests
-from streamlit_option_menu import option_menu
+from prophet import Prophet
+from prophet.plot import plot_plotly
+from plotly import graph_objs as go
 
-# Set page config
-st.set_page_config("🌎 Global Climate Dashboard", layout="wide")
+# Set Streamlit config
+st.set_page_config(page_title="🌦️ Climate Insight Dashboard", layout="wide")
+st.markdown("<h1 style='text-align: center;'>🌎 Climate Insight Dashboard</h1>", unsafe_allow_html=True)
 
-# Weather API
-WEATHER_API_KEY = st.secrets["weatherapi"]["api_key"]
-WEATHER_API_URL = "http://api.weatherapi.com/v1/current.json"
+# Upload data
+uploaded_file = st.sidebar.file_uploader("📤 Upload Climate Data CSV", type=["csv"])
 
-# Header
-st.markdown("<h1 style='text-align: center; color: #4e8cff;'>🌍 Global Climate Dashboard</h1>", unsafe_allow_html=True)
-st.markdown("<h4 style='text-align: center;'>Visualize weather patterns, forecast climate trends, and raise awareness 🌡🌱</h4><hr>", unsafe_allow_html=True)
+# WeatherAPI Key
+API_KEY = st.secrets["weatherapi"]["api_key"]
 
-# File uploader
-uploaded_file = st.sidebar.file_uploader("📂 Upload Climate Dataset (CSV)", type=["csv"])
+# ------------ WEATHERAPI -------------
+def get_live_weather(city="New York"):
+    url = f"http://api.weatherapi.com/v1/current.json?key={API_KEY}&q={city}&aqi=no"
+    res = requests.get(url).json()
+    if "error" in res:
+        return None
+    current = res["current"]
+    return {
+        "city": res["location"]["name"],
+        "region": res["location"]["region"],
+        "country": res["location"]["country"],
+        "temperature": current["temp_c"],
+        "condition": current["condition"]["text"],
+        "icon": current["condition"]["icon"],
+        "humidity": current["humidity"],
+        "wind_kph": current["wind_kph"]
+    }
 
-if uploaded_file is not None:
-    @st.cache_data
-    def load_data(file):
-        df = pd.read_csv(file)
-        df.rename(columns={"date": "ds"}, inplace=True)
-        df["ds"] = pd.to_datetime(df["ds"], errors='coerce')
-        return df.dropna()
+# -------------- LOAD DATA --------------
+@st.cache_data
+def load_data(file):
+    df = pd.read_csv(file)
+    for col in df.columns:
+        if 'date' in col.lower():
+            df.rename(columns={col: 'ds'}, inplace=True)
+            break
+    else:
+        st.error("❌ Could not find a datetime column (e.g. 'date').")
+        st.stop()
 
+    target_col = None
+    for col in df.columns:
+        if any(x in col.lower() for x in ['temp', 'target', 'value']):
+            target_col = col
+            break
+    if not target_col:
+        st.error("❌ Could not find a target value column (e.g. 'temperature').")
+        st.stop()
+    df.rename(columns={target_col: 'y'}, inplace=True)
+
+    df["ds"] = pd.to_datetime(df["ds"], errors="coerce")
+    df = df.dropna(subset=["ds", "y"])
+    return df
+
+# -------------- TABS --------------
+tabs = st.tabs(["🌤️ Live Weather", "📈 Forecast", "📊 Visualization", "🧠 Climate Summary & Awareness"])
+
+# ------------ TAB 1: LIVE WEATHER ------------
+with tabs[0]:
+    st.subheader("🌤️ Real-Time Weather")
+    city = st.text_input("Enter City", value="New York")
+    if city:
+        weather = get_live_weather(city)
+        if weather:
+            col1, col2 = st.columns([1, 2])
+            with col1:
+                st.image(f"https:{weather['icon']}", width=80)
+            with col2:
+                st.markdown(f"### {weather['city']}, {weather['region']}, {weather['country']}")
+                st.metric("Temperature (°C)", weather["temperature"])
+                st.metric("Condition", weather["condition"])
+                st.metric("Humidity (%)", weather["humidity"])
+                st.metric("Wind Speed (kph)", weather["wind_kph"])
+        else:
+            st.warning("⚠️ Could not fetch weather data. Try another city.")
+
+# ------------ LOAD & CLEAN DATA IF FILE EXISTS ------------
+if uploaded_file:
     df = load_data(uploaded_file)
 
-    # Check for city column
-    city_filter_enabled = 'city' in df.columns
-    if city_filter_enabled:
-        cities = sorted(df['city'].dropna().unique().tolist())
-
-    # Weather API call
-    def get_live_weather(city):
-        try:
-            response = requests.get(WEATHER_API_URL, params={"key": WEATHER_API_KEY, "q": city})
-            data = response.json()
-            return {
-                "location": data["location"]["name"],
-                "country": data["location"]["country"],
-                "temp_c": data["current"]["temp_c"],
-                "condition": data["current"]["condition"]["text"],
-                "humidity": data["current"]["humidity"],
-                "wind_kph": data["current"]["wind_kph"],
-                "icon": data["current"]["condition"]["icon"]
-            }
-        except:
-            return None
-
-    # Navigation Tabs
-    selected = option_menu(
-        None,
-        ["Live Weather", "Forecast", "Visualization", "Map View", "Monthly Summary", "Climate Awareness"],
-        icons=["cloud-sun", "calendar3", "bar-chart", "map", "calendar-event", "info-circle"],
-        orientation="horizontal"
-    )
-
-    # ===== LIVE WEATHER TAB =====
-    if selected == "Live Weather":
-        st.markdown("## ☁️ Live Weather Conditions")
-        city = st.text_input("Enter City", "New York")
-        if city:
-            weather = get_live_weather(city)
-            if weather:
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    st.metric("🌡 Temperature", f"{weather['temp_c']} °C")
-                    st.metric("💧 Humidity", f"{weather['humidity']}%")
-                    st.metric("🌬 Wind", f"{weather['wind_kph']} kph")
-                    st.success(f"{weather['location']}, {weather['country']} - {weather['condition']}")
-                with col2:
-                    st.image("http:" + weather["icon"], width=100)
-
-    # ===== FORECAST TAB =====
-    elif selected == "Forecast":
-        st.markdown("## 📈 Forecast Temperature Using Prophet")
-        if city_filter_enabled:
-            selected_city = st.selectbox("Select City", cities)
-            df_city = df[df['city'] == selected_city]
-        else:
-            df_city = df
-
-        df_prophet = df_city[["ds", "temperature"]].rename(columns={"temperature": "y"})
-        periods = st.slider("Forecast Days", 7, 180, 30)
-
+    # ------------ TAB 2: FORECAST ------------
+    with tabs[1]:
+        st.subheader("📈 Temperature Forecasting")
+        period = st.slider("Forecast Days", 7, 90)
         model = Prophet()
-        model.fit(df_prophet)
-        future = model.make_future_dataframe(periods=periods)
+        model.fit(df)
+        future = model.make_future_dataframe(periods=period)
         forecast = model.predict(future)
+        st.plotly_chart(plot_plotly(model, forecast), use_container_width=True)
 
-        fig = px.line(forecast, x='ds', y='yhat', title=f"{selected_city if city_filter_enabled else ''} Temperature Forecast")
-        st.plotly_chart(fig, use_container_width=True)
-        st.download_button("📩 Download Forecast CSV", forecast.to_csv(index=False), "forecast.csv")
-
-    # ===== VISUALIZATION TAB =====
-    elif selected == "Visualization":
-        st.markdown("## 📊 Climate Variable Over Time")
-        selected_column = st.selectbox("Choose Variable", df.select_dtypes('number').columns)
-        fig = px.line(df, x="ds", y=selected_column, title=f"{selected_column.title()} Over Time")
-        st.plotly_chart(fig, use_container_width=True)
-        st.download_button("📩 Download Full Dataset", df.to_csv(index=False), "climate_data.csv")
-
-    # ===== MAP TAB =====
-    elif selected == "Map View":
-        st.markdown("## 🗺 Climate Map Visualization")
-        if "latitude" in df.columns and "longitude" in df.columns:
-            variable = st.selectbox("Select Variable", ["temperature", "humidity", "wind_speed"])
-            latest = df.sort_values("ds").dropna(subset=[variable])
-            latest = latest.groupby("city", as_index=False).last()
-
-            fig = px.scatter_mapbox(
-                latest, lat="latitude", lon="longitude", color=variable, size=variable,
-                hover_name="city", zoom=1, mapbox_style="carto-positron"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("🌍 Your data must include 'latitude' and 'longitude' columns.")
-
-    # ===== MONTHLY SUMMARY TAB =====
-    elif selected == "Monthly Summary":
-        st.markdown("## 📅 Monthly Climate Averages")
-        df['month'] = df['ds'].dt.to_period('M').astype(str)
-        metric = st.selectbox("Select Metric", ["temperature", "humidity", "wind_speed"])
-        summary = df.groupby('month')[metric].mean().reset_index()
-        fig = px.bar(summary, x='month', y=metric, title=f"Monthly Average {metric.title()}")
+    # ------------ TAB 3: VISUALIZATION ------------
+    with tabs[2]:
+        st.subheader("📊 Data Visualization")
+        st.line_chart(df.set_index("ds")["y"])
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df["ds"], y=df["y"], name='Temperature', mode='lines'))
         st.plotly_chart(fig, use_container_width=True)
 
-    # ===== CLIMATE AWARENESS TAB =====
-    elif selected == "Climate Awareness":
-        st.markdown("## 🌱 Climate Summary & Awareness")
-        st.markdown("""
-        ### 🌡 Global Climate Quick Facts
-        - 🌍 Earth's temp has risen ~1.1°C since 1880.
-        - 🌊 Sea levels have risen ~20 cm since 1900.
-        - ❄ Arctic ice is shrinking ~13% per decade.
+    # ------------ TAB 4: CLIMATE SUMMARY ------------
+    with tabs[3]:
+        st.subheader("🧠 Climate Summary & Awareness")
+        st.markdown(f"""
+        ### 🌍 Summary
+        - Records: **{len(df)}**
+        - Date Range: **{df["ds"].min().date()} to {df["ds"].max().date()}**
+        - Average Value: **{df["y"].mean():.2f}**
 
-        ### 💡 Simple Actions That Help
-        - 🚲 Use bicycles or public transport.
-        - 💡 Switch to energy-saving bulbs.
-        - 🥬 Choose local & plant-based foods.
-        - 🌳 Support reforestation projects.
-
-        > _"The climate is changing. So should we."_ – United Nations
+        ### 🌿 Awareness Tips
+        - 🌱 Reduce energy usage and switch to renewables.
+        - 🚴‍♂️ Choose biking or public transport.
+        - ♻️ Recycle and reduce plastic waste.
+        - 🌲 Support tree planting efforts.
+        - 📢 Educate others and advocate climate action.
         """)
 
 else:
-    st.info("📂 Please upload a valid climate dataset to begin using the dashboard.")
-
+    with tabs[1]:
+        st.info("📤 Please upload a dataset to see forecast.")
+    with tabs[2]:
+        st.info("📤 Please upload a dataset for visualizations.")
+    with tabs[3]:
+        st.info("📤 Please upload a dataset for summary insights.")
