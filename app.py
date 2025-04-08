@@ -2,141 +2,116 @@ import streamlit as st
 import pandas as pd
 import requests
 from prophet import Prophet
+from prophet.plot import plot_plotly
 import plotly.express as px
 from datetime import datetime
-from io import StringIO
 
-# ---- Weather API Config ----
+# Load API key from secrets
 API_KEY = st.secrets["weatherapi"]["api_key"]
-WEATHER_API_URL = "http://api.weatherapi.com/v1/current.json"
 
-# ---- App Layout ----
-st.set_page_config(page_title="Climate Forecast Dashboard", layout="wide")
+st.set_page_config(page_title="🌦️ Climate Insights Dashboard", layout="wide")
+st.title("🌍 Climate Insights Dashboard")
+st.markdown("Upload your climate dataset and explore trends, forecasts, and real-time weather.")
 
-st.title("🌦️ Climate Forecast Dashboard")
-st.markdown("Get real-time weather updates and future climate predictions.")
-
-# ---- Upload Dataset ----
-uploaded_file = st.sidebar.file_uploader("📁 Upload your climate dataset (CSV)", type=["csv"])
+# === File Uploader ===
+uploaded_file = st.file_uploader("📂 Upload your climate CSV file", type=["csv"])
 
 @st.cache_data
 def load_data(file):
     df = pd.read_csv(file)
     df.columns = df.columns.str.lower()
-    if "date" in df.columns:
-        df.rename(columns={"date": "ds"}, inplace=True)
-    elif "datetime" in df.columns:
-        df.rename(columns={"datetime": "ds"}, inplace=True)
 
-    target_col = "y"
+    # Try to find datetime column
+    datetime_col = None
     for col in df.columns:
-        if col != "ds":
-            df.rename(columns={col: target_col}, inplace=True)
+        if "date" in col or "time" in col:
+            datetime_col = col
             break
-
+    if not datetime_col:
+        datetime_col = st.selectbox("📅 Select datetime column", df.columns)
+    df.rename(columns={datetime_col: "ds"}, inplace=True)
     df["ds"] = pd.to_datetime(df["ds"], errors="coerce")
+
+    # Detect numeric column
+    numeric_cols = df.select_dtypes(include=["float", "int"]).columns.tolist()
+    target_col = "temperature" if "temperature" in df.columns else None
+    if not target_col:
+        target_col = st.selectbox("📈 Select target column", numeric_cols)
+    df.rename(columns={target_col: "y"}, inplace=True)
     df.dropna(subset=["ds", "y"], inplace=True)
     return df
 
-# ---- Live Weather ----
-def get_live_weather(city="London"):
-    params = {"key": API_KEY, "q": city}
-    res = requests.get(WEATHER_API_URL, params=params)
+# === Live Weather ===
+@st.cache_data(ttl=600)
+def get_live_weather(city):
+    url = f"http://api.weatherapi.com/v1/current.json?key={API_KEY}&q={city}"
+    res = requests.get(url)
     data = res.json()
-
-    if "error" in data:
-        return {"error": data["error"]["message"]}
-
     current = data["current"]
     location = data["location"]
-    weather = {
-        "city": location["name"],
-        "region": location["region"],
-        "country": location["country"],
-        "temp_c": current["temp_c"],
-        "condition": current["condition"]["text"],
-        "icon": "https:" + current["condition"]["icon"],
-        "last_updated": current["last_updated"]
+    return {
+        "City": location["name"],
+        "Country": location["country"],
+        "Temperature (°C)": current["temp_c"],
+        "Humidity (%)": current["humidity"],
+        "Condition": current["condition"]["text"],
+        "Icon": "https:" + current["condition"]["icon"],
+        "Last Updated": current["last_updated"]
     }
-    return weather
 
-# ---- Tabs ----
-tabs = st.tabs(["🌍 Live Weather", "📈 Forecast", "📊 Visualizations", "📚 Climate Summary", "🌱 Awareness"])
+# === Tabs ===
+tabs = st.tabs(["🌤️ Live Weather", "📊 Forecast", "📁 Data Summary", "🌱 Climate Awareness"])
 
-# ==== Tab 1: Live Weather ====
+# === Tab 1: Live Weather ===
 with tabs[0]:
-    st.subheader("Live Weather Info")
-    city = st.text_input("Enter City for Live Weather", "London")
-    weather = get_live_weather(city)
+    st.header("🌤️ Live Weather")
+    city = st.text_input("Enter a city name", value="New York")
+    if city:
+        try:
+            weather = get_live_weather(city)
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                st.metric("Temperature (°C)", weather["Temperature (°C)"])
+                st.metric("Humidity (%)", weather["Humidity (%)"])
+                st.write("**Condition:**", weather["Condition"])
+                st.write("**Location:**", f"{weather['City']}, {weather['Country']}")
+                st.write("**Last Updated:**", weather["Last Updated"])
+            with col2:
+                st.image(weather["Icon"])
+        except:
+            st.error("Could not retrieve weather data. Please check city name or API.")
 
-    if "error" in weather:
-        st.error(f"⚠️ {weather['error']}")
-    else:
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            st.image(weather["icon"], width=100)
-        with col2:
-            st.markdown(f"### {weather['city']}, {weather['country']}")
-            st.write(f"**Temperature**: {weather['temp_c']}°C")
-            st.write(f"**Condition**: {weather['condition']}")
-            st.write(f"**Last Updated**: {weather['last_updated']}")
+# === Other tabs only work if a file is uploaded ===
+if uploaded_file:
+    df = load_data(uploaded_file)
 
-# ==== Tab 2: Forecast ====
-with tabs[1]:
-    st.subheader("Forecasting Climate Trends")
-    if uploaded_file:
-        df = load_data(uploaded_file)
-
-        st.write("Sample Data:")
-        st.dataframe(df.head())
-
+    # === Tab 2: Forecast ===
+    with tabs[1]:
+        st.header("📊 Forecast with Prophet")
+        period = st.slider("Select forecast period (days)", 7, 60, 30)
         m = Prophet()
         m.fit(df)
-
-        future = m.make_future_dataframe(periods=30)
+        future = m.make_future_dataframe(periods=period)
         forecast = m.predict(future)
+        st.plotly_chart(plot_plotly(m, forecast), use_container_width=True)
 
-        st.plotly_chart(px.line(forecast, x="ds", y="yhat", title="Forecasted Temperature / Target"))
+    # === Tab 3: Data Summary ===
+    with tabs[2]:
+        st.header("📁 Data Summary")
+        st.dataframe(df.head(100), use_container_width=True)
+        st.subheader("📈 Data Distribution")
+        fig = px.histogram(df, x="y", nbins=30, title="Distribution of Values")
+        st.plotly_chart(fig, use_container_width=True)
 
-        st.write("Forecast Data:")
-        st.dataframe(forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(10))
-    else:
-        st.info("Please upload a dataset in the sidebar to generate a forecast.")
-
-# ==== Tab 3: Visualizations ====
-with tabs[2]:
-    st.subheader("Climate Data Visualizations")
-    if uploaded_file:
-        df = load_data(uploaded_file)
-
-        st.plotly_chart(px.line(df, x="ds", y="y", title="Historical Climate Trends"))
-        st.plotly_chart(px.scatter(df, x="ds", y="y", title="Scatter View"))
-    else:
-        st.info("Upload a dataset to see visualizations.")
-
-# ==== Tab 4: Climate Summary ====
+# === Tab 4: Climate Awareness ===
 with tabs[3]:
-    st.subheader("Climate Summary")
-    if uploaded_file:
-        df = load_data(uploaded_file)
-        st.write("📊 **Summary Statistics:**")
-        st.dataframe(df.describe())
-    else:
-        st.info("Upload a dataset to display summary statistics.")
-
-# ==== Tab 5: Awareness ====
-with tabs[4]:
-    st.subheader("Climate Change Awareness 🌍")
+    st.header("🌱 Climate Awareness")
     st.markdown("""
-    Climate change is one of the most pressing issues of our time.  
-    Here's what you can do to contribute:
-
-    - Reduce, reuse, and recycle
-    - Switch to renewable energy
-    - Use public transportation or cycle
-    - Plant trees and support afforestation
-    - Support environmental organizations
-
-    Learn more at [UN Climate Action](https://www.un.org/en/climatechange).
+    Climate change is real and happening now. Here are some ways you can help:
+    - ♻️ Reduce, reuse, and recycle
+    - 🚲 Walk, bike, or use public transportation
+    - 💡 Conserve energy
+    - 🌳 Plant trees and support reforestation
+    - 🧠 Educate others and raise awareness
     """)
-
+    st.image("https://climate.nasa.gov/system/internal_resources/details/original/3099_1-global-temp.jpg", caption="NASA Climate Change Data")
