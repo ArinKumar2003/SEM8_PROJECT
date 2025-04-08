@@ -3,162 +3,120 @@ import pandas as pd
 import requests
 from prophet import Prophet
 from prophet.plot import plot_plotly
+from streamlit_option_menu import option_menu
+from streamlit_extras.metric_cards import style_metric_cards
 import plotly.express as px
 
-st.set_page_config(page_title="🌦️ Weather Insights Dashboard", layout="wide")
+st.set_page_config(page_title="Smart Weather Dashboard 🌦️", layout="wide")
 
-# --- Secrets for API key ---
+# Title
+st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🌍 Smart Weather Dashboard</h1>", unsafe_allow_html=True)
+st.markdown("<h4 style='text-align: center; color: gray;'>Live Weather • Forecast • Insights • Awareness</h4>", unsafe_allow_html=True)
+st.markdown("---")
+
+# Load data
+@st.cache_data
+def load_data():
+    df = pd.read_csv("cleaned_weather.csv", parse_dates=['datetime'])
+    df.rename(columns={'datetime': 'ds', 'temperature': 'y'}, inplace=True)
+    df = df[['ds', 'y']].dropna()
+    return df
+
+df = load_data()
+
+# WeatherAPI function
 def get_live_weather(city):
-    api_key = st.secrets["weatherstack"]["api_key"]
-    url = f"http://api.weatherstack.com/current?access_key={api_key}&query={city}"
+    api_key = st.secrets["weatherapi"]["api_key"]
+    url = f"http://api.weatherapi.com/v1/current.json?key={api_key}&q={city}&aqi=no"
     response = requests.get(url)
     if response.status_code == 200:
         data = response.json()
-        if 'current' in data:
-            return {
-                "temperature": data["current"]["temperature"],
-                "weather_descriptions": data["current"]["weather_descriptions"][0],
-                "humidity": data["current"]["humidity"],
-                "wind_speed": data["current"]["wind_speed"],
-                "icon": data["current"]["weather_icons"][0]
-            }
+        current = data["current"]
+        return {
+            "temperature": current["temp_c"],
+            "description": current["condition"]["text"],
+            "humidity": current["humidity"],
+            "wind": current["wind_kph"],
+            "icon": f"https:{current['condition']['icon']}"
+        }
     return None
 
-# --- Forecast Function ---
-def forecast_weather(df, periods=30):
-    df_prophet = df[['ds', 'y']].dropna()
-    model = Prophet()
-    model.fit(df_prophet)
-    future = model.make_future_dataframe(periods=periods)
-    forecast = model.predict(future)
-    return model, forecast
-
-# --- Title ---
-st.markdown("<h1 style='text-align: center; color: #1f77b4;'>🌍 Global Weather Dashboard</h1>", unsafe_allow_html=True)
-st.markdown("<h4 style='text-align: center; color: gray;'>Live weather, forecasts, and climate insights — all in one place</h4>", unsafe_allow_html=True)
-
-# --- Upload Data in Sidebar ---
-st.sidebar.header("📁 Upload Your Weather Data")
-uploaded_file = st.sidebar.file_uploader("Upload CSV with 'ds' (date) and 'y' (temp)", type=["csv"])
-
-df = None
-if uploaded_file:
-    try:
-        df = pd.read_csv(uploaded_file, parse_dates=["ds"])
-        if 'ds' not in df.columns or 'y' not in df.columns:
-            st.sidebar.error("CSV must contain 'ds' and 'y' columns.")
-            df = None
-    except Exception as e:
-        st.sidebar.error(f"Error reading file: {e}")
-        df = None
-
-# --- Tab Layout (no upload tab) ---
-tabs = st.tabs([
-    "🌍 Live Weather",
-    "📊 Dataset Overview",
-    "📈 Forecast",
-    "📉 Trend Analysis",
-    "📤 Export Forecast",
-    "🌱 Climate Awareness"
-])
+# Main tab layout
+with st.sidebar:
+    selected = option_menu("Main Menu", [
+        "Live Weather", 
+        "Forecast", 
+        "Climate Summary", 
+        "Awareness & Tips"
+    ], icons=["cloud-sun", "graph-up", "bar-chart", "lightbulb"], menu_icon="cast", default_index=0)
 
 # --- Tab 1: Live Weather ---
-with tabs[0]:
-    st.header("🌍 Real-Time Weather Conditions")
-    city = st.text_input("Enter a city", "New York")
+if selected == "Live Weather":
+    st.subheader("📍 Real-Time Weather")
+    city = st.text_input("Enter a city", value="Delhi")
+
     if city:
         weather = get_live_weather(city)
         if weather:
-            col1, col2, col3, col4 = st.columns([1, 2, 2, 2])
+            col1, col2 = st.columns([2, 1])
             with col1:
-                st.image(weather["icon"], width=80)
+                st.metric(label="🌡️ Temperature (°C)", value=weather["temperature"])
+                st.metric(label="💧 Humidity (%)", value=weather["humidity"])
+                st.metric(label="🌬️ Wind Speed (kph)", value=weather["wind"])
+                st.write(f"**Condition:** {weather['description']}")
             with col2:
-                st.metric("Temperature (°C)", weather["temperature"])
-            with col3:
-                st.metric("Humidity", f"{weather['humidity']}%")
-            with col4:
-                st.metric("Wind Speed", f"{weather['wind_speed']} km/h")
-            st.caption(f"Description: {weather['weather_descriptions']}")
+                st.image(weather["icon"], width=100)
         else:
-            st.warning("⚠️ Weather data not found for this city.")
+            st.warning("Could not retrieve weather data. Please check the city name or try again.")
 
-# --- Tab 2: Dataset Overview ---
-with tabs[1]:
-    st.header("📊 Dataset Overview")
-    if df is not None:
-        st.write(df.head(10))
-        st.success(f"✅ {len(df)} records from {df['ds'].min().date()} to {df['ds'].max().date()}")
-        fig = px.line(df, x='ds', y='y', title="Temperature Over Time", labels={'ds': 'Date', 'y': 'Temperature (°C)'})
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Upload a dataset from the sidebar to view data.")
+# --- Tab 2: Forecasting ---
+elif selected == "Forecast":
+    st.subheader("📈 Weather Forecast")
+    st.write("Using historical data from your uploaded dataset.")
 
-# --- Tab 3: Forecast ---
-with tabs[2]:
-    st.header("📈 Temperature Forecast")
-    if df is not None:
-        days = st.slider("Days to Forecast", 7, 90, 30)
-        with st.spinner("Generating forecast..."):
-            model, forecast = forecast_weather(df, days)
-            fig = plot_plotly(model, forecast)
-            st.plotly_chart(fig, use_container_width=True)
-        st.dataframe(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(days))
-    else:
-        st.info("Upload data to generate a forecast.")
+    period = st.slider("Forecast period (days)", 1, 30, 7)
+    
+    # Prophet model
+    model = Prophet()
+    model.fit(df)
+    future = model.make_future_dataframe(periods=period)
+    forecast = model.predict(future)
 
-# --- Tab 4: Trend Analysis ---
-with tabs[3]:
-    st.header("📉 Trend Analysis")
-    if df is not None:
-        df["month"] = df["ds"].dt.to_period("M")
-        monthly_avg = df.groupby("month")["y"].mean().reset_index()
-        monthly_avg["month"] = monthly_avg["month"].astype(str)
+    fig1 = plot_plotly(model, forecast)
+    st.plotly_chart(fig1, use_container_width=True)
 
-        st.subheader("📆 Monthly Average Temperature")
-        fig = px.line(monthly_avg, x='month', y='y', title="Monthly Average", labels={"y": "Temp (°C)"})
-        st.plotly_chart(fig, use_container_width=True)
+    st.write("Forecast data:")
+    st.dataframe(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(period))
 
-        st.subheader("📊 7-Day Moving Average")
-        df["rolling"] = df["y"].rolling(window=7).mean()
-        fig = px.line(df, x="ds", y="rolling", title="7-Day Moving Average")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("No trend analysis available without data.")
+# --- Tab 3: Climate Summary ---
+elif selected == "Climate Summary":
+    st.subheader("📊 Climate Summary from Dataset")
 
-# --- Tab 5: Export Forecast ---
-with tabs[4]:
-    st.header("📤 Export Forecast")
-    if df is not None:
-        _, forecast = forecast_weather(df)
-        csv = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_csv(index=False).encode('utf-8')
-        st.download_button("Download Forecast CSV", data=csv, file_name="forecast.csv", mime="text/csv")
-    else:
-        st.info("Generate a forecast before exporting.")
+    st.write("This section provides basic analytics and visualizations from the uploaded historical weather data.")
+    col1, col2 = st.columns(2)
+    col1.metric("Records", df.shape[0])
+    col2.metric("Avg Temperature (°C)", round(df['y'].mean(), 2))
 
-# --- Tab 6: Climate Awareness ---
-with tabs[5]:
-    st.header("🌱 Climate Summary & Awareness")
-    if df is not None:
-        st.subheader("🧾 Data Summary")
-        st.write("📅 Date Range:", df["ds"].min().date(), "→", df["ds"].max().date())
-        st.write("🌡 Avg Temp:", round(df["y"].mean(), 2), "°C")
-        st.write("🔺 Max Temp:", df["y"].max(), "°C")
-        st.write("🔻 Min Temp:", df["y"].min(), "°C")
-    else:
-        st.info("Upload data to view summary.")
+    # Line chart of temperature trends
+    fig = px.line(df, x='ds', y='y', title='Temperature Over Time', labels={'ds': 'Date', 'y': 'Temperature (°C)'})
+    st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("🌍 Climate Tips")
+# --- Tab 4: Awareness ---
+elif selected == "Awareness & Tips":
+    st.subheader("💡 Climate Change Awareness & Weather Safety Tips")
+
     st.markdown("""
-    - 🚶 Walk or bike for short trips  
-    - 🌲 Plant trees and support reforestation  
-    - 💡 Use energy-efficient lighting  
-    - ♻️ Practice the 3Rs: Reduce, Reuse, Recycle  
-    - 🌐 Spread awareness on climate change
+    ### 🌎 Climate Awareness
+    - The Earth's temperature has increased by **1.1°C** since the late 1800s.
+    - Frequent extreme weather events are direct consequences of climate change.
+    - Small actions like reducing emissions and conserving energy can have a global impact.
+
+    ### 🛡️ Weather Safety Tips
+    - **Extreme Heat:** Stay hydrated, avoid outdoor activity during peak hours.
+    - **Floods:** Avoid flood-prone areas, listen to local alerts.
+    - **Storms:** Secure loose items, stay indoors.
+
+    > Stay informed. Be prepared. Act sustainably.
     """)
 
-    st.subheader("📚 Learn More")
-    st.markdown("""
-    - [UN Climate Action](https://www.un.org/en/climatechange)  
-    - [NASA Climate Change](https://climate.nasa.gov/)
-    """)
-
+    st.image("https://climate.nasa.gov/system/content_pages/main_images/1051_graphic-global-temp-update-2023-1200px.jpg", caption="Source: NASA", use_column_width=True)
