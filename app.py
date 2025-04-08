@@ -1,126 +1,142 @@
 import streamlit as st
 import pandas as pd
 import requests
+from prophet import Prophet
+import plotly.express as px
 from datetime import datetime
+from io import StringIO
 
-st.set_page_config(page_title="Climate Insights Dashboard", layout="wide")
+# ---- Weather API Config ----
+API_KEY = st.secrets["weatherapi"]["api_key"]
+WEATHER_API_URL = "http://api.weatherapi.com/v1/current.json"
 
-# --- Secrets ---
-API_KEY = st.secrets["api_key"]
+# ---- App Layout ----
+st.set_page_config(page_title="Climate Forecast Dashboard", layout="wide")
 
-# --- Title ---
-st.markdown("# 🌍 Climate Insights Dashboard")
-st.markdown("Real-time weather, forecast visualization, and climate awareness.")
+st.title("🌦️ Climate Forecast Dashboard")
+st.markdown("Get real-time weather updates and future climate predictions.")
 
-# --- WeatherAPI Live Weather Fetch ---
-def get_live_weather(city="New York"):
-    url = f"http://api.weatherapi.com/v1/current.json?key={API_KEY}&q={city}&aqi=no"
-    try:
-        res = requests.get(url)
-        res.raise_for_status()
-        data = res.json()
+# ---- Upload Dataset ----
+uploaded_file = st.sidebar.file_uploader("📁 Upload your climate dataset (CSV)", type=["csv"])
 
-        if "location" not in data or "current" not in data:
-            st.error("⚠️ Unexpected response format from WeatherAPI.")
-            st.json(data)
-            return None
-
-        current = data["current"]
-        location = data["location"]
-
-        return {
-            "city": location.get("name", city),
-            "region": location.get("region", ""),
-            "country": location.get("country", ""),
-            "temperature": current.get("temp_c", "N/A"),
-            "condition": current.get("condition", {}).get("text", "Unknown"),
-            "icon": current.get("condition", {}).get("icon", ""),
-            "humidity": current.get("humidity", "N/A"),
-            "wind_kph": current.get("wind_kph", "N/A")
-        }
-
-    except Exception as e:
-        st.error(f"⚠️ Could not fetch weather data: {e}")
-        return None
-
-# --- Load Climate Dataset from Upload ---
 @st.cache_data
-def load_data(uploaded_file):
-    df = pd.read_csv(uploaded_file)
-    df.columns = df.columns.str.strip().str.lower()
-    if 'date' in df.columns:
-        df['date'] = pd.to_datetime(df['date'], errors='coerce')
+def load_data(file):
+    df = pd.read_csv(file)
+    df.columns = df.columns.str.lower()
+    if "date" in df.columns:
+        df.rename(columns={"date": "ds"}, inplace=True)
+    elif "datetime" in df.columns:
+        df.rename(columns={"datetime": "ds"}, inplace=True)
+
+    target_col = "y"
+    for col in df.columns:
+        if col != "ds":
+            df.rename(columns={col: target_col}, inplace=True)
+            break
+
+    df["ds"] = pd.to_datetime(df["ds"], errors="coerce")
+    df.dropna(subset=["ds", "y"], inplace=True)
     return df
 
-# --- File Upload ---
-st.sidebar.header("📁 Upload Climate Data")
-uploaded_file = st.sidebar.file_uploader("Upload CSV file", type=["csv"])
+# ---- Live Weather ----
+def get_live_weather(city="London"):
+    params = {"key": API_KEY, "q": city}
+    res = requests.get(WEATHER_API_URL, params=params)
+    data = res.json()
 
-if uploaded_file:
-    df = load_data(uploaded_file)
-else:
-    st.warning("📂 Please upload a dataset to continue.")
-    st.stop()
+    if "error" in data:
+        return {"error": data["error"]["message"]}
 
-# --- Tabs ---
-tabs = st.tabs(["🌤️ Live Weather", "📈 Forecast", "📊 Visualizations", "📚 Climate Summary & Awareness"])
+    current = data["current"]
+    location = data["location"]
+    weather = {
+        "city": location["name"],
+        "region": location["region"],
+        "country": location["country"],
+        "temp_c": current["temp_c"],
+        "condition": current["condition"]["text"],
+        "icon": "https:" + current["condition"]["icon"],
+        "last_updated": current["last_updated"]
+    }
+    return weather
 
-# --- Live Weather Tab ---
+# ---- Tabs ----
+tabs = st.tabs(["🌍 Live Weather", "📈 Forecast", "📊 Visualizations", "📚 Climate Summary", "🌱 Awareness"])
+
+# ==== Tab 1: Live Weather ====
 with tabs[0]:
-    st.subheader("Real-Time Weather")
-    city = st.text_input("Enter a city", value="New York")
-    if city:
-        weather = get_live_weather(city)
-        if weather:
-            col1, col2 = st.columns([1, 2])
-            with col1:
-                if weather["icon"]:
-                    st.image(f"https:{weather['icon']}", width=80)
-            with col2:
-                st.markdown(f"### {weather['city']}, {weather['region']}, {weather['country']}")
-                st.metric("🌡️ Temperature (°C)", weather["temperature"])
-                st.metric("☁️ Condition", weather["condition"])
-                st.metric("💧 Humidity", f"{weather['humidity']}%")
-                st.metric("💨 Wind Speed", f"{weather['wind_kph']} kph")
+    st.subheader("Live Weather Info")
+    city = st.text_input("Enter City for Live Weather", "London")
+    weather = get_live_weather(city)
 
-# --- Forecast Tab ---
+    if "error" in weather:
+        st.error(f"⚠️ {weather['error']}")
+    else:
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            st.image(weather["icon"], width=100)
+        with col2:
+            st.markdown(f"### {weather['city']}, {weather['country']}")
+            st.write(f"**Temperature**: {weather['temp_c']}°C")
+            st.write(f"**Condition**: {weather['condition']}")
+            st.write(f"**Last Updated**: {weather['last_updated']}")
+
+# ==== Tab 2: Forecast ====
 with tabs[1]:
-    st.subheader("📈 Forecast Trends")
-    if 'date' in df.columns:
-        metric = st.selectbox("Select metric to visualize", options=[col for col in df.columns if col != 'date'])
-        st.line_chart(df.set_index("date")[metric])
-    else:
-        st.error("❌ The dataset must contain a 'date' column.")
+    st.subheader("Forecasting Climate Trends")
+    if uploaded_file:
+        df = load_data(uploaded_file)
 
-# --- Visualizations Tab ---
+        st.write("Sample Data:")
+        st.dataframe(df.head())
+
+        m = Prophet()
+        m.fit(df)
+
+        future = m.make_future_dataframe(periods=30)
+        forecast = m.predict(future)
+
+        st.plotly_chart(px.line(forecast, x="ds", y="yhat", title="Forecasted Temperature / Target"))
+
+        st.write("Forecast Data:")
+        st.dataframe(forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(10))
+    else:
+        st.info("Please upload a dataset in the sidebar to generate a forecast.")
+
+# ==== Tab 3: Visualizations ====
 with tabs[2]:
-    st.subheader("📊 Climate Visualizations")
-    st.markdown("Explore your dataset with automatic charts.")
-    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
-    if len(numeric_cols) >= 2:
-        x = st.selectbox("X-axis", options=numeric_cols)
-        y = st.selectbox("Y-axis", options=numeric_cols, index=1)
-        st.scatter_chart(df[[x, y]])
+    st.subheader("Climate Data Visualizations")
+    if uploaded_file:
+        df = load_data(uploaded_file)
+
+        st.plotly_chart(px.line(df, x="ds", y="y", title="Historical Climate Trends"))
+        st.plotly_chart(px.scatter(df, x="ds", y="y", title="Scatter View"))
     else:
-        st.warning("📉 Not enough numeric data for scatter plot.")
+        st.info("Upload a dataset to see visualizations.")
 
-# --- Climate Summary & Awareness Tab ---
+# ==== Tab 4: Climate Summary ====
 with tabs[3]:
-    st.subheader("📚 Climate Summary & Awareness")
+    st.subheader("Climate Summary")
+    if uploaded_file:
+        df = load_data(uploaded_file)
+        st.write("📊 **Summary Statistics:**")
+        st.dataframe(df.describe())
+    else:
+        st.info("Upload a dataset to display summary statistics.")
+
+# ==== Tab 5: Awareness ====
+with tabs[4]:
+    st.subheader("Climate Change Awareness 🌍")
     st.markdown("""
-    Climate change is impacting weather patterns globally. This dashboard helps visualize trends and raise awareness.
+    Climate change is one of the most pressing issues of our time.  
+    Here's what you can do to contribute:
 
-    #### Things to Consider:
-    - 🔥 Rising global temperatures
-    - 🌊 Sea level rise
-    - 🌪️ Increased frequency of extreme events
-    - 🌾 Impact on agriculture and biodiversity
+    - Reduce, reuse, and recycle
+    - Switch to renewable energy
+    - Use public transportation or cycle
+    - Plant trees and support afforestation
+    - Support environmental organizations
 
-    #### What You Can Do:
-    - Reduce your carbon footprint 🌱
-    - Support sustainable practices ♻️
-    - Stay informed and educate others 📢
+    Learn more at [UN Climate Action](https://www.un.org/en/climatechange).
     """)
-
-    st.success("🌟 Knowledge is power. Let's use data to inspire climate action!")
 
