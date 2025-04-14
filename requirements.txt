@@ -1,8 +1,6 @@
-streamlit==1.32.2
-pandas>=1.3
-numpy>=1.23
-requests
+streamlit
+pandas
 plotly
+prophet
+requests
 matplotlib
-prophet==1.1.5
-pystan==2.19.1.1
