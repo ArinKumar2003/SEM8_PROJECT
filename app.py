@@ -5,19 +5,20 @@ from prophet import Prophet
 from prophet.plot import plot_plotly
 import plotly.express as px
 from datetime import datetime
+from io import StringIO
 
-# Streamlit page settings
-st.set_page_config(page_title="🌤️ Climate Forecasting App", layout="wide")
-st.title("🌦️ Climate Forecasting with Prophet")
+st.set_page_config(page_title="🌦️ Climate Forecasting", layout="wide")
 
-# Load API key from secrets
+st.title("🌤️ Climate Forecasting Dashboard (Prophet)")
+st.caption("Forecast variables like temperature, humidity, wind speed, and more.")
+
+# API key (optional for weather info)
 API_KEY = st.secrets["weatherapi"]["api_key"]
 
-@st.cache_data(show_spinner=False)
+@st.cache_data
 def get_weather(city):
     url = f"http://api.weatherapi.com/v1/current.json?key={API_KEY}&q={city}&aqi=no"
     res = requests.get(url).json()
-
     return {
         "location": res["location"]["name"],
         "country": res["location"]["country"],
@@ -26,27 +27,6 @@ def get_weather(city):
         "icon": res["current"]["condition"]["icon"]
     }
 
-# Sidebar: Upload CSV
-st.sidebar.header("📁 Upload Dataset")
-uploaded_file = st.sidebar.file_uploader("Upload your climate CSV file", type=["csv"])
-
-# Sidebar: Current weather
-st.sidebar.header("☁️ Current Weather")
-city = st.sidebar.text_input("City", value="Delhi")
-
-if city:
-    try:
-        weather = get_weather(city)
-        st.sidebar.markdown(f"""
-        **{weather['location']}, {weather['country']}**
-        - 🌡️ Temp: {weather['temp_c']}°C  
-        - 🌤️ {weather['condition']}
-        """)
-        st.sidebar.image(f"https:{weather['icon']}")
-    except:
-        st.sidebar.error("⚠️ Could not fetch weather info")
-
-# Load and preprocess dataset
 @st.cache_data
 def load_data(file):
     df = pd.read_csv(file)
@@ -54,59 +34,80 @@ def load_data(file):
     df = df.dropna(subset=["datetime"])
     return df
 
+# Upload
+st.sidebar.header("📁 Upload Data")
+uploaded_file = st.sidebar.file_uploader("Upload climate CSV", type=["csv"])
+
+# Weather (optional)
+st.sidebar.header("🌍 City Weather")
+city = st.sidebar.text_input("City", "Delhi")
+if city:
+    try:
+        weather = get_weather(city)
+        st.sidebar.markdown(f"""
+        **{weather['location']}, {weather['country']}**
+        - 🌡️ {weather['temp_c']}°C  
+        - 🌤️ {weather['condition']}
+        """)
+        st.sidebar.image(f"https:{weather['icon']}")
+    except:
+        st.sidebar.warning("Couldn't fetch weather info")
+
 if uploaded_file:
     df = load_data(uploaded_file)
 
-    st.subheader("📊 Raw Data Preview")
+    st.subheader("📊 Raw Data Overview")
     with st.expander("Show Raw Data"):
-        st.dataframe(df)
+        st.dataframe(df, use_container_width=True)
 
-    st.markdown("### 📌 Forecast Settings")
+    st.markdown("### ⚙️ Forecast Settings")
 
-    # Target variable
-    options = df.columns.drop("datetime")
-    target_col = st.selectbox("🎯 Select a column to forecast", options, index=0)
+    # Target column
+    numeric_cols = ["temperature", "humidity", "wind_speed", "pressure", "rain"]
+    target = st.selectbox("📈 Choose a variable to forecast", numeric_cols)
 
-    # Granularity
-    granularity = st.radio("⏱️ Granularity", ["Daily", "Weekly", "Monthly"], horizontal=True)
+    # Resampling frequency
+    freq_label = st.radio("⏱️ Time Granularity", ["Daily", "Weekly", "Monthly"], horizontal=True)
+    freq = "D" if freq_label == "Daily" else "W" if freq_label == "Weekly" else "M"
 
-    # Preprocess
-    df = df[["datetime", target_col]].dropna()
-    df = df.rename(columns={"datetime": "ds", target_col: "y"})
+    # Filter + Rename
+    data = df[["datetime", target]].rename(columns={"datetime": "ds", target: "y"})
+    data = data.dropna()
 
-    if granularity == "Weekly":
-        df = df.resample("W-MON", on="ds").mean().reset_index()
-    elif granularity == "Monthly":
-        df = df.resample("M", on="ds").mean().reset_index()
+    # Resample
+    data = data.set_index("ds").resample(freq).mean().reset_index()
 
-    # Forecast horizon
-    periods = st.slider("📆 Forecast how many future periods?", min_value=30, max_value=730, step=30, value=90)
+    # Stats
+    latest = data.dropna().tail(30)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("📊 Mean", f"{latest['y'].mean():.2f}")
+    col2.metric("⬆️ Max", f"{latest['y'].max():.2f}")
+    col3.metric("⬇️ Min", f"{latest['y'].min():.2f}")
 
-    # Train model
-    with st.spinner("Training model..."):
-        model = Prophet()
-        model.fit(df)
+    # Forecast range
+    periods = st.slider("📆 Forecast length", 30, 730, 90, step=30)
 
-        future = model.make_future_dataframe(periods=periods, freq="D" if granularity == "Daily" else "W" if granularity == "Weekly" else "M")
-        forecast = model.predict(future)
+    # Prophet model
+    model = Prophet()
+    model.fit(data)
 
-    # Plot forecast
-    st.subheader("📈 Forecast Plot")
+    future = model.make_future_dataframe(periods=periods, freq=freq)
+    forecast = model.predict(future)
+
+    st.subheader("📈 Forecast Chart")
     fig1 = plot_plotly(model, forecast)
     st.plotly_chart(fig1, use_container_width=True)
 
-    # Plot components
-    st.subheader("🧩 Forecast Components")
+    st.subheader("📊 Forecast Components")
     fig2 = model.plot_components(forecast)
     st.pyplot(fig2)
 
-    # Table output
-    with st.expander("📌 Forecast Summary Table"):
-        st.dataframe(forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(20))
+    with st.expander("🧾 Forecast Data Table"):
+        st.dataframe(forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(30))
 
-    # Download button
+    # Download forecast
     csv = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].to_csv(index=False)
-    st.download_button("📥 Download Forecast CSV", csv, file_name="forecast.csv", mime="text/csv")
+    st.download_button("📥 Download Forecast CSV", csv, file_name=f"{target}_forecast.csv", mime="text/csv")
 
 else:
-    st.info("👆 Upload your dataset to begin forecasting.")
+    st.info("👆 Upload your climate dataset to begin.")
