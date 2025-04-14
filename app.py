@@ -5,8 +5,8 @@ from prophet import Prophet
 from prophet.plot import plot_plotly
 import plotly.express as px
 from datetime import datetime
-from io import BytesIO
 
+# Streamlit page settings
 st.set_page_config(page_title="🌤️ Climate Forecasting App", layout="wide")
 st.title("🌦️ Climate Forecasting with Prophet")
 
@@ -17,6 +17,7 @@ API_KEY = st.secrets["weatherapi"]["api_key"]
 def get_weather(city):
     url = f"http://api.weatherapi.com/v1/current.json?key={API_KEY}&q={city}&aqi=no"
     res = requests.get(url).json()
+
     return {
         "location": res["location"]["name"],
         "country": res["location"]["country"],
@@ -25,10 +26,11 @@ def get_weather(city):
         "icon": res["current"]["condition"]["icon"]
     }
 
-# Sidebar Upload & Weather
+# Sidebar: Upload CSV
 st.sidebar.header("📁 Upload Dataset")
 uploaded_file = st.sidebar.file_uploader("Upload your climate CSV file", type=["csv"])
 
+# Sidebar: Current weather
 st.sidebar.header("☁️ Current Weather")
 city = st.sidebar.text_input("City", value="Delhi")
 
@@ -44,77 +46,67 @@ if city:
     except:
         st.sidebar.error("⚠️ Could not fetch weather info")
 
-# Load and process data
+# Load and preprocess dataset
 @st.cache_data
 def load_data(file):
     df = pd.read_csv(file)
-    df["datetime"] = pd.to_datetime(dict(year=df["Years"], month=df["Month"], day=df["Day"]), errors="coerce")
+    df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce")
     df = df.dropna(subset=["datetime"])
     return df
 
 if uploaded_file:
     df = load_data(uploaded_file)
 
-    st.subheader("📊 Data Overview")
-    st.dataframe(df.head(100))
+    st.subheader("📊 Raw Data Preview")
+    with st.expander("Show Raw Data"):
+        st.dataframe(df)
 
-    # Select column for forecasting
-    forecast_cols = ["CO2", "Humidity", "SeaLevel", "Temperature"]
-    target_col = st.selectbox("🎯 Select a column to forecast", forecast_cols)
+    st.markdown("### 📌 Forecast Settings")
 
-    # Filter date range
-    min_date, max_date = df["datetime"].min(), df["datetime"].max()
-    date_range = st.slider("📅 Select date range", min_value=min_date, max_value=max_date,
-                           value=(min_date, max_date))
-    df = df[(df["datetime"] >= date_range[0]) & (df["datetime"] <= date_range[1])]
-
-    # Plot preview
-    st.markdown("### 📈 Historical Trend")
-    fig = px.line(df, x="datetime", y=target_col, title=f"{target_col} Over Time")
-    st.plotly_chart(fig, use_container_width=True)
-
-    # Show stats
-    with st.expander("📌 Descriptive Statistics"):
-        st.write(df[forecast_cols].describe())
-
-    st.markdown("### ⚙️ Forecast Settings")
+    # Target variable
+    options = df.columns.drop("datetime")
+    target_col = st.selectbox("🎯 Select a column to forecast", options, index=0)
 
     # Granularity
     granularity = st.radio("⏱️ Granularity", ["Daily", "Weekly", "Monthly"], horizontal=True)
 
-    df_prophet = df[["datetime", target_col]].dropna().rename(columns={"datetime": "ds", target_col: "y"})
+    # Preprocess
+    df = df[["datetime", target_col]].dropna()
+    df = df.rename(columns={"datetime": "ds", target_col: "y"})
 
     if granularity == "Weekly":
-        df_prophet = df_prophet.resample("W-MON", on="ds").mean().reset_index()
+        df = df.resample("W-MON", on="ds").mean().reset_index()
     elif granularity == "Monthly":
-        df_prophet = df_prophet.resample("M", on="ds").mean().reset_index()
+        df = df.resample("M", on="ds").mean().reset_index()
 
-    # Forecast period
+    # Forecast horizon
     periods = st.slider("📆 Forecast how many future periods?", min_value=30, max_value=730, step=30, value=90)
 
-    # Fit model
-    model = Prophet()
-    model.fit(df_prophet)
+    # Train model
+    with st.spinner("Training model..."):
+        model = Prophet()
+        model.fit(df)
 
-    future = model.make_future_dataframe(periods=periods, freq="D" if granularity == "Daily" else "W" if granularity == "Weekly" else "M")
-    forecast = model.predict(future)
+        future = model.make_future_dataframe(periods=periods, freq="D" if granularity == "Daily" else "W" if granularity == "Weekly" else "M")
+        forecast = model.predict(future)
 
+    # Plot forecast
     st.subheader("📈 Forecast Plot")
     fig1 = plot_plotly(model, forecast)
     st.plotly_chart(fig1, use_container_width=True)
 
+    # Plot components
     st.subheader("🧩 Forecast Components")
     fig2 = model.plot_components(forecast)
     st.pyplot(fig2)
 
+    # Table output
     with st.expander("📌 Forecast Summary Table"):
         st.dataframe(forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(20))
 
-    # Download
+    # Download button
     csv = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].to_csv(index=False)
-    st.download_button("📥 Download Forecast CSV",
-                       csv,
-                       file_name=f"{target_col}_forecast.csv",
-                       mime="text/csv")
+    st.download_button("📥 Download Forecast CSV", csv, file_name="forecast.csv", mime="text/csv")
+
 else:
     st.info("👆 Upload your dataset to begin forecasting.")
