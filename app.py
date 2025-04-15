@@ -12,7 +12,7 @@ st.set_page_config(page_title="Climate Forecast App", layout="centered")
 st.title("🌍 Climate Forecasting and Weather Insights")
 
 # File uploader for user to upload the 'climate_large_data_sorted.csv'
-uploaded_file = st.file_uploader("Upload your climate dataset", type=["csv"])
+uploaded_file = st.file_uploader("Upload your climate dataset (climate_large_data_sorted.csv)", type=["csv"])
 
 # If a file is uploaded, load and process the data
 if uploaded_file is not None:
@@ -26,11 +26,11 @@ if uploaded_file is not None:
     else:
         st.error("Uploaded data must contain 'Years', 'Month', and 'Day' columns to create a Date.")
 
-    # Tabs for different features
-    tab1, tab2, tab3 = st.tabs(["📊 Forecasting", "📈 Historical Trends"])
+    # Use radio buttons to navigate between tabs
+    option = st.radio("Select Section", ["📊 Forecasting", "📈 Historical Trends"])
 
-    # --- TAB 1: Forecasting ---
-    with tab1:
+    # --- Forecasting Section ---
+    if option == "📊 Forecasting":
         st.header("📊 Forecast Future Climate Data")
 
         # Select metric for forecasting
@@ -59,8 +59,8 @@ if uploaded_file is not None:
         else:
             st.error(f"'{metric}' not found in uploaded data.")
 
-    # --- TAB 2: Historical Trends ---
-    with tab2:
+    # --- Historical Trends Section ---
+    elif option == "📈 Historical Trends":
         st.header("📈 Visualize Historical Trends")
 
         if 'Date' in df.columns:
@@ -83,4 +83,4 @@ if uploaded_file is not None:
         else:
             st.error("Uploaded data does not contain a valid 'Date' column.")
 else:
-    st.write("Please upload your dataset to get started.")
+    st.write("Please upload your `climate_large_data_sorted.csv` to get started.")
