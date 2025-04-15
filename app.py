@@ -40,10 +40,10 @@ if uploaded_file is not None:
         st.error("Uploaded data must contain 'Years', 'Month', and 'Day' columns to create a Date.")
 
     # Tabs for different features
-    option = st.radio("Select Section", ["🌦️ Live Weather", "📊 Forecasting", "📈 Historical Trends"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🌦️ Live Weather", "📊 Forecasting", "📈 Historical Trends", "📊 Data Summary", "📉 Seasonal Trends"])
 
-    # --- LIVE WEATHER TAB ---
-    if option == "🌦️ Live Weather":
+    # --- TAB 1: LIVE WEATHER ---
+    with tab1:
         st.header("☀️ Live Weather Data")
         st.write("Get live weather updates from your city!")
         
@@ -60,8 +60,8 @@ if uploaded_file is not None:
             else:
                 st.error("City not found or there was an issue with the weather API.")
 
-    # --- FORECASTING TAB ---
-    elif option == "📊 Forecasting":
+    # --- TAB 2: FORECASTING ---
+    with tab2:
         st.header("📊 Forecast Future Climate Data")
         st.write("Use this section to forecast future climate data trends using Prophet.")
 
@@ -91,8 +91,8 @@ if uploaded_file is not None:
         else:
             st.error(f"'{metric}' not found in uploaded data.")
 
-    # --- HISTORICAL TRENDS TAB ---
-    elif option == "📈 Historical Trends":
+    # --- TAB 3: HISTORICAL TRENDS ---
+    with tab3:
         st.header("📈 Visualize Historical Trends")
         st.write("Explore historical trends of climate metrics over time.")
 
@@ -104,18 +104,53 @@ if uploaded_file is not None:
                 # Plot historical trends using Plotly
                 fig2 = px.line(df, x='Date', y=metric, title=f"Historical {metric} Trends")
                 st.plotly_chart(fig2)
+            else:
+                st.error(f"'{metric}' not found in uploaded data.")
+        else:
+            st.error("Uploaded data does not contain a valid 'Date' column.")
 
-                # Seasonal decomposition of the selected metric
-                st.subheader("📉 Seasonal Decomposition")
+    # --- TAB 4: DATA SUMMARY ---
+    with tab4:
+        st.header("📊 Data Summary")
+        st.write("Get an overview of the dataset with statistics and distributions.")
+
+        # Display basic dataset info
+        st.subheader("Data Preview")
+        st.write(df.head())
+
+        # Display statistics
+        st.subheader("Data Statistics")
+        st.write(df.describe())
+
+        # Plot distributions of selected metrics
+        st.subheader("Distributions of Climate Metrics")
+        metric = st.selectbox("Select metric for distribution", ['CO2', 'Humidity', 'SeaLevel', 'Temperature'], key='distribution')
+
+        if metric in df.columns:
+            fig3 = px.histogram(df, x=metric, title=f"Distribution of {metric}")
+            st.plotly_chart(fig3)
+        else:
+            st.error(f"'{metric}' not found in uploaded data.")
+
+    # --- TAB 5: SEASONAL TRENDS ---
+    with tab5:
+        st.header("📉 Seasonal Trends")
+        st.write("Explore seasonal trends of climate metrics.")
+
+        if 'Date' in df.columns:
+            # Select metric for seasonal analysis
+            metric = st.selectbox("Select metric for seasonal analysis", ['CO2', 'Humidity', 'SeaLevel', 'Temperature'], key='seasonal')
+
+            if metric in df.columns:
+                # Perform seasonal decomposition
                 result = seasonal_decompose(df[metric], period=12, model='additive')
-                
-                st.write("Trend Component")
+                st.subheader("Trend Component")
                 st.line_chart(result.trend)
                 
-                st.write("Seasonal Component")
+                st.subheader("Seasonal Component")
                 st.line_chart(result.seasonal)
                 
-                st.write("Residual Component")
+                st.subheader("Residual Component")
                 st.line_chart(result.resid)
             else:
                 st.error(f"'{metric}' not found in uploaded data.")
