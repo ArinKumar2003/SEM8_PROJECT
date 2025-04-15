@@ -4,15 +4,28 @@ import plotly.express as px
 from prophet import Prophet
 from prophet.plot import plot_plotly
 from statsmodels.tsa.seasonal import seasonal_decompose
+import requests
 
 # Set up the page configuration
-st.set_page_config(page_title="Climate Forecast App", layout="centered")
+st.set_page_config(page_title="Climate Forecast App", layout="wide")
 
 # Title of the app
 st.title("🌍 Climate Forecasting and Weather Insights")
 
-# File uploader for user to upload the 'climate_large_data_sorted.csv'
-uploaded_file = st.file_uploader("Upload your climate dataset (climate_large_data_sorted.csv)", type=["csv"])
+# Sidebar for file upload
+st.sidebar.header("Upload Data")
+uploaded_file = st.sidebar.file_uploader("Upload your climate dataset (climate_large_data_sorted.csv)", type=["csv"])
+
+# Sidebar for live weather input
+st.sidebar.header("Live Weather")
+API_KEY = "e12e93484a0645f2802141629250803"  # Replace with your own API key from WeatherAPI
+city = st.sidebar.text_input("Enter city name for live weather", "Mohali")
+
+# Function to get live weather data
+def get_weather(city):
+    url = f"http://api.weatherapi.com/v1/current.json?q={city}&key={API_KEY}&aqi=no"
+    response = requests.get(url)
+    return response.json()
 
 # If a file is uploaded, load and process the data
 if uploaded_file is not None:
@@ -26,11 +39,25 @@ if uploaded_file is not None:
     else:
         st.error("Uploaded data must contain 'Years', 'Month', and 'Day' columns to create a Date.")
 
-    # Use radio buttons to navigate between tabs
-    option = st.radio("Select Section", ["📊 Forecasting", "📈 Historical Trends"])
+    # Tabs for different features
+    option = st.radio("Select Section", ["🌦️ Live Weather", "📊 Forecasting", "📈 Historical Trends"])
 
-    # --- Forecasting Section ---
-    if option == "📊 Forecasting":
+    # --- LIVE WEATHER TAB ---
+    if option == "🌦️ Live Weather":
+        st.header("☀️ Live Weather Data")
+
+        if city:
+            weather = get_weather(city)
+            if "current" in weather:
+                st.metric("Temperature (°C)", weather['current']['temp_c'])
+                st.metric("Humidity (%)", weather['current']['humidity'])
+                st.write(f"🌤️ **Condition**: {weather['current']['condition']['text']}")
+                st.write(f"📍 Location: {weather['location']['name']}, {weather['location']['country']}")
+            else:
+                st.error("City not found or there was an issue with the weather API.")
+
+    # --- FORECASTING TAB ---
+    elif option == "📊 Forecasting":
         st.header("📊 Forecast Future Climate Data")
 
         # Select metric for forecasting
@@ -59,7 +86,7 @@ if uploaded_file is not None:
         else:
             st.error(f"'{metric}' not found in uploaded data.")
 
-    # --- Historical Trends Section ---
+    # --- HISTORICAL TRENDS TAB ---
     elif option == "📈 Historical Trends":
         st.header("📈 Visualize Historical Trends")
 
@@ -82,5 +109,6 @@ if uploaded_file is not None:
                 st.error(f"'{metric}' not found in uploaded data.")
         else:
             st.error("Uploaded data does not contain a valid 'Date' column.")
+
 else:
-    st.write("Please upload your `climate_large_data_sorted.csv` to get started.")
+    st.sidebar.write("Please upload your `climate_large_data_sorted.csv` to get started.")
