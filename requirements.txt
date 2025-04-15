@@ -1,7 +1,7 @@
-streamlit
-pandas
-plotly
-prophet
-requests
-matplotlib
-statsmodels
+streamlit==1.33.0
+pandas==2.2.1
+plotly==5.21.0
+prophet==1.1.5
+requests==2.31.0
+statsmodels==0.14.1
+numpy==1.26.4
