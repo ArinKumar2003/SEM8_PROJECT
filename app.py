@@ -1,113 +1,61 @@
 import streamlit as st
 import pandas as pd
-import requests
 from prophet import Prophet
 from prophet.plot import plot_plotly
 import plotly.express as px
-from datetime import datetime
-from io import StringIO
 
-st.set_page_config(page_title="🌦️ Climate Forecasting", layout="wide")
+st.set_page_config(page_title="📈 Climate Forecast App", layout="wide")
+st.title("🌍 Climate Forecasting using Time Series (Prophet)")
+st.markdown("Upload your dataset and forecast climate indicators like CO₂, humidity, sea level, or temperature.")
 
-st.title("🌤️ Climate Forecasting Dashboard (Prophet)")
-st.caption("Forecast variables like temperature, humidity, wind speed, and more.")
-
-# API key (optional for weather info)
-API_KEY = st.secrets["weatherapi"]["api_key"]
-
-@st.cache_data
-def get_weather(city):
-    url = f"http://api.weatherapi.com/v1/current.json?key={API_KEY}&q={city}&aqi=no"
-    res = requests.get(url).json()
-    return {
-        "location": res["location"]["name"],
-        "country": res["location"]["country"],
-        "temp_c": res["current"]["temp_c"],
-        "condition": res["current"]["condition"]["text"],
-        "icon": res["current"]["condition"]["icon"]
-    }
-
-@st.cache_data
-def load_data(file):
-    df = pd.read_csv(file)
-    df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce")
-    df = df.dropna(subset=["datetime"])
-    return df
-
-# Upload
-st.sidebar.header("📁 Upload Data")
-uploaded_file = st.sidebar.file_uploader("Upload climate CSV", type=["csv"])
-
-# Weather (optional)
-st.sidebar.header("🌍 City Weather")
-city = st.sidebar.text_input("City", "Delhi")
-if city:
-    try:
-        weather = get_weather(city)
-        st.sidebar.markdown(f"""
-        **{weather['location']}, {weather['country']}**
-        - 🌡️ {weather['temp_c']}°C  
-        - 🌤️ {weather['condition']}
-        """)
-        st.sidebar.image(f"https:{weather['icon']}")
-    except:
-        st.sidebar.warning("Couldn't fetch weather info")
+# File upload
+uploaded_file = st.file_uploader("📁 Upload your CSV dataset", type=["csv"])
 
 if uploaded_file:
-    df = load_data(uploaded_file)
+    df = pd.read_csv(uploaded_file)
 
-    st.subheader("📊 Raw Data Overview")
-    with st.expander("Show Raw Data"):
-        st.dataframe(df, use_container_width=True)
+    # Combine date columns into datetime
+    try:
+        df['ds'] = pd.to_datetime(df[['Years', 'Month', 'Day']])
+    except Exception as e:
+        st.error(f"❌ Error creating datetime column: {e}")
+        st.stop()
 
-    st.markdown("### ⚙️ Forecast Settings")
+    # Rename target columns
+    df = df.rename(columns={
+        'CO2': 'CO2',
+        'Humidity': 'Humidity',
+        'SeaLevel': 'SeaLevel',
+        'Temperature': 'Temperature'
+    })
 
-    # Target column
-    numeric_cols = ["temperature", "humidity", "wind_speed", "pressure", "rain"]
-    target = st.selectbox("📈 Choose a variable to forecast", numeric_cols)
+    st.success("✅ Dataset successfully loaded and datetime created!")
+    st.write(df.head())
 
-    # Resampling frequency
-    freq_label = st.radio("⏱️ Time Granularity", ["Daily", "Weekly", "Monthly"], horizontal=True)
-    freq = "D" if freq_label == "Daily" else "W" if freq_label == "Weekly" else "M"
+    # Let user select a metric to forecast
+    metric = st.selectbox("📊 Select a metric to forecast", ['CO2', 'Humidity', 'SeaLevel', 'Temperature'])
 
-    # Filter + Rename
-    data = df[["datetime", target]].rename(columns={"datetime": "ds", target: "y"})
-    data = data.dropna()
+    periods = st.slider("📆 Days to forecast into the future", min_value=7, max_value=365, value=30)
 
-    # Resample
-    data = data.set_index("ds").resample(freq).mean().reset_index()
+    # Prepare data for Prophet
+    prophet_df = df[['ds', metric]].rename(columns={metric: 'y'})
 
-    # Stats
-    latest = data.dropna().tail(30)
-    col1, col2, col3 = st.columns(3)
-    col1.metric("📊 Mean", f"{latest['y'].mean():.2f}")
-    col2.metric("⬆️ Max", f"{latest['y'].max():.2f}")
-    col3.metric("⬇️ Min", f"{latest['y'].min():.2f}")
-
-    # Forecast range
-    periods = st.slider("📆 Forecast length", 30, 730, 90, step=30)
-
-    # Prophet model
+    # Build and fit model
     model = Prophet()
-    model.fit(data)
+    model.fit(prophet_df)
 
-    future = model.make_future_dataframe(periods=periods, freq=freq)
+    # Make future dataframe
+    future = model.make_future_dataframe(periods=periods)
     forecast = model.predict(future)
 
-    st.subheader("📈 Forecast Chart")
-    fig1 = plot_plotly(model, forecast)
-    st.plotly_chart(fig1, use_container_width=True)
+    # Show forecast plot
+    st.subheader("📈 Forecast Plot")
+    fig = plot_plotly(model, forecast)
+    st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("📊 Forecast Components")
-    fig2 = model.plot_components(forecast)
-    st.pyplot(fig2)
-
-    with st.expander("🧾 Forecast Data Table"):
-        st.dataframe(forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(30))
-
-    # Download forecast
-    csv = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].to_csv(index=False)
-    st.download_button("📥 Download Forecast CSV", csv, file_name=f"{target}_forecast.csv", mime="text/csv")
+    # Show forecast table
+    st.subheader("📋 Forecast Data")
+    st.dataframe(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(periods))
 
 else:
-    st.info("👆 Upload your climate dataset to begin.")
+    st.info("👆 Upload a dataset with columns: Years, Month, Day, CO2, Humidity, SeaLevel, Temperature to begin.")
