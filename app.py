@@ -3,160 +3,128 @@ import pandas as pd
 import plotly.express as px
 from prophet import Prophet
 from prophet.plot import plot_plotly
-from statsmodels.tsa.seasonal import seasonal_decompose
 import requests
+from io import StringIO
+from statsmodels.tsa.seasonal import seasonal_decompose
 
-# Set up the page configuration
-st.set_page_config(page_title="Climate Forecast App", layout="wide")
+# Page configuration
+st.set_page_config(page_title="Climate Forecast App", layout="centered")
 
-# Title of the app
-st.title("🌍 Climate Forecasting and Weather Insights")
+st.title("🌍 Climate Forecasting & Live Weather Dashboard")
 
-# Sidebar for file upload
-st.sidebar.header("Upload Data")
-uploaded_file = st.sidebar.file_uploader("Upload your climate dataset (climate_large_data_sorted.csv)", type=["csv"])
+# Sidebar: Upload dataset
+st.sidebar.header("📂 Upload Climate Data")
+uploaded_file = st.sidebar.file_uploader("Upload CSV file", type=["csv"])
 
-# Sidebar for live weather input
-st.sidebar.header("Live Weather")
-API_KEY = "e12e93484a0645f2802141629250803"  # Replace with your own API key from WeatherAPI
-city = st.sidebar.text_input("Enter city name for live weather", "Mohali")
-
-# Function to get live weather data
-def get_weather(city):
-    url = f"http://api.weatherapi.com/v1/current.json?q={city}&key={API_KEY}&aqi=no"
-    response = requests.get(url)
-    return response.json()
-
-# If a file is uploaded, load and process the data
-if uploaded_file is not None:
+if uploaded_file:
     df = pd.read_csv(uploaded_file)
-    st.write("Dataset successfully loaded!")
+    df['Date'] = pd.to_datetime(df[['Years', 'Month', 'Day']])
+    df = df.sort_values('Date')
 
-    # Check for the necessary columns in the uploaded data
-    if "Years" in df.columns and "Month" in df.columns and "Day" in df.columns:
-        # Combine Year, Month, Day to create a Date column
-        df['Date'] = pd.to_datetime(df[['Years', 'Month', 'Day']])
-    else:
-        st.error("Uploaded data must contain 'Years', 'Month', and 'Day' columns to create a Date.")
+    # Weather API config
+    API_KEY = st.secrets["weatherapi"]["api_key"]
+    WEATHER_API_URL = "http://api.weatherapi.com/v1/current.json"
 
-    # Tabs for different features
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🌦️ Live Weather", "📊 Forecasting", "📈 Historical Trends", "📊 Data Summary", "📉 Seasonal Trends"])
+    # Tabs setup
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "☀️ Live Weather",
+        "📊 Forecasting",
+        "📈 Historical Trends",
+        "🔍 Raw Data"
+    ])
 
     # --- TAB 1: LIVE WEATHER ---
     with tab1:
         st.header("☀️ Live Weather Data")
-        st.write("Get live weather updates from your city!")
-        
+        city = st.text_input("Enter city name", "Mohali")
+
+        def get_weather(city):
+            url = f"{WEATHER_API_URL}?key={API_KEY}&q={city}"
+            response = requests.get(url)
+            return response.json()
+
         if city:
             weather = get_weather(city)
-            if "current" in weather:
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Temperature (°C)", weather['current']['temp_c'])
-                    st.metric("Humidity (%)", weather['current']['humidity'])
-                with col2:
-                    st.write(f"🌤️ **Condition**: {weather['current']['condition']['text']}")
-                    st.write(f"📍 Location: {weather['location']['name']}, {weather['location']['country']}")
+            if weather.get("current"):
+                st.metric("Temperature (°C)", weather['current']['temp_c'])
+                st.metric("Humidity (%)", weather['current']['humidity'])
+                st.metric("Wind (kph)", weather['current']['wind_kph'])
+                st.write(f"**Condition**: {weather['current']['condition']['text']}")
             else:
-                st.error("City not found or there was an issue with the weather API.")
+                st.error("City not found or API issue.")
 
     # --- TAB 2: FORECASTING ---
     with tab2:
         st.header("📊 Forecast Future Climate Data")
-        st.write("Use this section to forecast future climate data trends using Prophet.")
+        metric = st.selectbox("Select metric to forecast", ['CO2', 'Humidity', 'SeaLevel', 'Temperature'])
 
-        # Select metric for forecasting
-        metric = st.selectbox("Select metric to forecast", ['CO2', 'Humidity', 'SeaLevel', 'Temperature'], help="Select the climate metric you want to forecast.")
-
-        # Prepare data for forecasting
         if metric in df.columns:
-            data = df[['Date', metric]].rename(columns={"Date": "ds", metric: "y"})
+            data = df[['Date', metric]].dropna()
+            data = data.rename(columns={"Date": "ds", metric: "y"})
 
-            # Create and fit the Prophet model
             model = Prophet()
             model.fit(data)
+
             future = model.make_future_dataframe(periods=365)
             forecast = model.predict(future)
 
+            # Plot forecast
             st.subheader("Forecast Plot")
             fig1 = plot_plotly(model, forecast)
             st.plotly_chart(fig1)
 
-            st.subheader("Forecast Data")
+            # Predictions
+            last_date = data['ds'].max()
+            next_day = last_date + pd.Timedelta(days=1)
+            next_month = last_date + pd.DateOffset(months=1)
+
+            next_day_pred = forecast.loc[forecast['ds'] == next_day]
+            next_month_pred = forecast.loc[forecast['ds'] == next_month]
+
+            if next_day_pred.empty:
+                next_day_pred = forecast[forecast['ds'] > next_day].head(1)
+            if next_month_pred.empty:
+                next_month_pred = forecast[forecast['ds'] > next_month].head(1)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric(
+                    label=f"🗓️ Next Day ({next_day_pred['ds'].dt.date.values[0]})",
+                    value=f"{next_day_pred['yhat'].values[0]:.2f} {metric}"
+                )
+            with col2:
+                st.metric(
+                    label=f"📅 Next Month ({next_month_pred['ds'].dt.date.values[0]})",
+                    value=f"{next_month_pred['yhat'].values[0]:.2f} {metric}"
+                )
+
+            # Table and download
+            st.subheader("Forecast Data Preview")
             st.dataframe(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail())
 
-            # Download button for forecast data
             csv = forecast.to_csv(index=False).encode('utf-8')
             st.download_button("⬇️ Download Forecast", data=csv, file_name='forecast.csv', mime='text/csv')
         else:
-            st.error(f"'{metric}' not found in uploaded data.")
+            st.warning("Selected metric is not in dataset.")
 
     # --- TAB 3: HISTORICAL TRENDS ---
     with tab3:
-        st.header("📈 Visualize Historical Trends")
-        st.write("Explore historical trends of climate metrics over time.")
+        st.header("📈 Historical Data Trends")
+        metric = st.selectbox("Select metric for historical view", ['CO2', 'Humidity', 'SeaLevel', 'Temperature'], key='hist')
 
-        if 'Date' in df.columns:
-            # Select metric for historical trend visualization
-            metric = st.selectbox("Select metric for trend analysis", ['CO2', 'Humidity', 'SeaLevel', 'Temperature'], key='trend')
+        fig2 = px.line(df, x='Date', y=metric, title=f"Historical Trend of {metric}")
+        st.plotly_chart(fig2)
 
-            if metric in df.columns:
-                # Plot historical trends using Plotly
-                fig2 = px.line(df, x='Date', y=metric, title=f"Historical {metric} Trends")
-                st.plotly_chart(fig2)
-            else:
-                st.error(f"'{metric}' not found in uploaded data.")
-        else:
-            st.error("Uploaded data does not contain a valid 'Date' column.")
+        st.subheader("📉 Seasonal Decomposition")
+        result = seasonal_decompose(df[metric], period=12, model='additive', extrapolate_trend='freq')
+        st.line_chart(result.trend.rename("Trend"))
+        st.line_chart(result.seasonal.rename("Seasonality"))
+        st.line_chart(result.resid.rename("Residual"))
 
-    # --- TAB 4: DATA SUMMARY ---
+    # --- TAB 4: RAW DATA ---
     with tab4:
-        st.header("📊 Data Summary")
-        st.write("Get an overview of the dataset with statistics and distributions.")
-
-        # Display basic dataset info
-        st.subheader("Data Preview")
-        st.write(df.head())
-
-        # Display statistics
-        st.subheader("Data Statistics")
-        st.write(df.describe())
-
-        # Plot distributions of selected metrics
-        st.subheader("Distributions of Climate Metrics")
-        metric = st.selectbox("Select metric for distribution", ['CO2', 'Humidity', 'SeaLevel', 'Temperature'], key='distribution')
-
-        if metric in df.columns:
-            fig3 = px.histogram(df, x=metric, title=f"Distribution of {metric}")
-            st.plotly_chart(fig3)
-        else:
-            st.error(f"'{metric}' not found in uploaded data.")
-
-    # --- TAB 5: SEASONAL TRENDS ---
-    with tab5:
-        st.header("📉 Seasonal Trends")
-        st.write("Explore seasonal trends of climate metrics.")
-
-        if 'Date' in df.columns:
-            # Select metric for seasonal analysis
-            metric = st.selectbox("Select metric for seasonal analysis", ['CO2', 'Humidity', 'SeaLevel', 'Temperature'], key='seasonal')
-
-            if metric in df.columns:
-                # Perform seasonal decomposition
-                result = seasonal_decompose(df[metric], period=12, model='additive')
-                st.subheader("Trend Component")
-                st.line_chart(result.trend)
-                
-                st.subheader("Seasonal Component")
-                st.line_chart(result.seasonal)
-                
-                st.subheader("Residual Component")
-                st.line_chart(result.resid)
-            else:
-                st.error(f"'{metric}' not found in uploaded data.")
-        else:
-            st.error("Uploaded data does not contain a valid 'Date' column.")
-
+        st.header("🔍 Uploaded Dataset")
+        st.dataframe(df.head(100))
+        st.download_button("⬇️ Download Original Data", data=uploaded_file, file_name="climate_data.csv")
 else:
-    st.sidebar.write("Please upload your `climate_large_data_sorted.csv` to get started.")
-    st.write("Upload a valid CSV file for analysis.")
+    st.warning("Please upload a climate dataset (CSV format) from the sidebar to begin.")
