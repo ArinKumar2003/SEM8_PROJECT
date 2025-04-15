@@ -45,23 +45,28 @@ if uploaded_file is not None:
     # --- LIVE WEATHER TAB ---
     if option == "🌦️ Live Weather":
         st.header("☀️ Live Weather Data")
-
+        st.write("Get live weather updates from your city!")
+        
         if city:
             weather = get_weather(city)
             if "current" in weather:
-                st.metric("Temperature (°C)", weather['current']['temp_c'])
-                st.metric("Humidity (%)", weather['current']['humidity'])
-                st.write(f"🌤️ **Condition**: {weather['current']['condition']['text']}")
-                st.write(f"📍 Location: {weather['location']['name']}, {weather['location']['country']}")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Temperature (°C)", weather['current']['temp_c'])
+                    st.metric("Humidity (%)", weather['current']['humidity'])
+                with col2:
+                    st.write(f"🌤️ **Condition**: {weather['current']['condition']['text']}")
+                    st.write(f"📍 Location: {weather['location']['name']}, {weather['location']['country']}")
             else:
                 st.error("City not found or there was an issue with the weather API.")
 
     # --- FORECASTING TAB ---
     elif option == "📊 Forecasting":
         st.header("📊 Forecast Future Climate Data")
+        st.write("Use this section to forecast future climate data trends using Prophet.")
 
         # Select metric for forecasting
-        metric = st.selectbox("Select metric to forecast", ['CO2', 'Humidity', 'SeaLevel', 'Temperature'])
+        metric = st.selectbox("Select metric to forecast", ['CO2', 'Humidity', 'SeaLevel', 'Temperature'], help="Select the climate metric you want to forecast.")
 
         # Prepare data for forecasting
         if metric in df.columns:
@@ -89,6 +94,7 @@ if uploaded_file is not None:
     # --- HISTORICAL TRENDS TAB ---
     elif option == "📈 Historical Trends":
         st.header("📈 Visualize Historical Trends")
+        st.write("Explore historical trends of climate metrics over time.")
 
         if 'Date' in df.columns:
             # Select metric for historical trend visualization
@@ -102,8 +108,14 @@ if uploaded_file is not None:
                 # Seasonal decomposition of the selected metric
                 st.subheader("📉 Seasonal Decomposition")
                 result = seasonal_decompose(df[metric], period=12, model='additive')
+                
+                st.write("Trend Component")
                 st.line_chart(result.trend)
+                
+                st.write("Seasonal Component")
                 st.line_chart(result.seasonal)
+                
+                st.write("Residual Component")
                 st.line_chart(result.resid)
             else:
                 st.error(f"'{metric}' not found in uploaded data.")
@@ -112,3 +124,4 @@ if uploaded_file is not None:
 
 else:
     st.sidebar.write("Please upload your `climate_large_data_sorted.csv` to get started.")
+    st.write("Upload a valid CSV file for analysis.")
