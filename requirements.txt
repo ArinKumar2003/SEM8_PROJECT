@@ -4,3 +4,4 @@ plotly
 prophet
 requests
 matplotlib
+statsmodels
