@@ -11,9 +11,11 @@ st.title("🌎 Advanced Climate Forecasting Dashboard")
 
 # Sidebar - Upload CSV
 data_file = st.sidebar.file_uploader("📤 Upload your climate CSV file", type=["csv"])
-forecast_days = st.sidebar.slider("📅 Forecast Period (days)", min_value=7, max_value=365, value=60)
 
-# Live Weather Tab
+# Sidebar - Forecast settings
+forecast_days = st.sidebar.slider("📅 Forecast Period (days)", min_value=7, max_value=365, value=30)
+
+# --- Live Weather Tab ---
 st.subheader("☀️ Live Weather")
 city = st.text_input("Enter city name", "Mohali")
 API_KEY = "e12e93484a0645f2802141629250803"
@@ -33,27 +35,25 @@ if city:
     except Exception as e:
         st.error("API request failed.")
 
-# Proceed only if data file is uploaded
+# --- Main Tabs ---
 if data_file is not None:
     df = pd.read_csv(data_file)
 
-    # Parse 'Date' column
-    df['Date'] = pd.to_datetime(df['Date'])
+    # Safe Date Parsing
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    df = df.dropna(subset=['Date'])
 
-    # Standardize column names
+    # Rename columns for consistency
     df.rename(columns={
         'CO2 Emissions': 'CO2',
         'Sea Level Rise': 'SeaLevel',
-        'Wind Speed': 'WindSpeed',
-        'Temperature': 'Temperature',
-        'Humidity': 'Humidity'
+        'Wind Speed': 'WindSpeed'
     }, inplace=True)
 
-    # Tabs
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📊 Forecasting", "📈 Historical Trends", "📉 Seasonal Analysis", "⚠️ Anomaly Detection", "🌍 Geo Visualization"])
 
-    # Forecasting Tab
+    # --- Forecasting Tab ---
     with tab1:
         st.header("📊 Forecast Future Climate Data")
         metric = st.selectbox("Select metric to forecast", ['CO2', 'Humidity', 'SeaLevel', 'Temperature'])
@@ -64,38 +64,37 @@ if data_file is not None:
         future = model.make_future_dataframe(periods=forecast_days)
         forecast = model.predict(future)
 
-        st.subheader("Forecast Plot")
+        st.subheader("📈 Forecast Plot")
         fig1 = plot_plotly(model, forecast)
         st.plotly_chart(fig1, use_container_width=True)
 
-        # Show predictions for specific dates
-        target_dates = pd.to_datetime(["2025-04-24", "2025-05-24"])
-        predictions = forecast[forecast['ds'].isin(target_dates)][['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
+        # Predict specific future dates
+        st.subheader("📅 Predictions for Key Future Dates")
+        future_dates = pd.to_datetime(["2025-04-24", "2025-05-24"])
+        predictions = forecast[forecast['ds'].isin(future_dates)][['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
+        st.write(predictions)
 
-        st.subheader("📅 Forecast for Specific Future Dates")
-        if not predictions.empty:
-            st.write(predictions)
-        else:
-            st.info("Selected dates are outside the forecast range. Try increasing the forecast period.")
-
-    # Historical Trends Tab
+    # --- Historical Trends Tab ---
     with tab2:
         st.header("📈 Visualize Historical Trends")
         metric = st.selectbox("Select metric", ['CO2', 'Humidity', 'SeaLevel', 'Temperature'], key='trend')
         fig2 = px.line(df, x='Date', y=metric, title=f"Historical {metric} Trends")
         st.plotly_chart(fig2, use_container_width=True)
 
-    # Seasonal Analysis Tab
+    # --- Seasonal Analysis Tab ---
     with tab3:
         st.header("📉 Seasonal Decomposition")
         metric = st.selectbox("Select metric for decomposition", ['CO2', 'Humidity', 'SeaLevel', 'Temperature'], key='decomp')
-        data = df.set_index('Date')[metric].dropna()
-        result = seasonal_decompose(data, model='additive', period=12)
-        st.line_chart(result.trend.rename("Trend"))
-        st.line_chart(result.seasonal.rename("Seasonality"))
-        st.line_chart(result.resid.rename("Residuals"))
+        series = df.set_index('Date')[metric].dropna()
+        try:
+            result = seasonal_decompose(series, period=12, model='additive')
+            st.line_chart(result.trend.rename("Trend"))
+            st.line_chart(result.seasonal.rename("Seasonality"))
+            st.line_chart(result.resid.rename("Residuals"))
+        except Exception as e:
+            st.error("Decomposition failed. Try a different metric or check data length.")
 
-    # Anomaly Detection Tab
+    # --- Anomaly Detection Tab ---
     with tab4:
         st.header("⚠️ Anomaly Detection")
         metric = st.selectbox("Select metric to analyze anomalies", ['CO2', 'Humidity', 'SeaLevel', 'Temperature'], key='anomaly')
@@ -108,11 +107,13 @@ if data_file is not None:
 
         st.warning(f"Detected {len(anomalies)} anomalies in {metric}.")
         st.dataframe(anomalies[['Date', metric]])
+
         fig3 = px.scatter(df, x='Date', y=metric, title="Anomalies Highlighted")
-        fig3.add_scatter(x=anomalies['Date'], y=anomalies[metric], mode='markers', marker=dict(color='red', size=8), name="Anomaly")
+        fig3.add_scatter(x=anomalies['Date'], y=anomalies[metric],
+                         mode='markers', marker=dict(color='red', size=8), name="Anomaly")
         st.plotly_chart(fig3, use_container_width=True)
 
-    # Geo Visualization Tab
+    # --- Geo Visualization Tab ---
     with tab5:
         st.header("🌍 Climate Geo Map (Experimental)")
         if 'Latitude' in df.columns and 'Longitude' in df.columns:
