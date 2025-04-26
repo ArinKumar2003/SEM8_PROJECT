@@ -3,16 +3,31 @@ import pandas as pd
 import requests
 import matplotlib.pyplot as plt
 import seaborn as sns
-import numpy as np
 
-# Set up API key
+# Set up API key for weather
 WEATHER_API_KEY = "e12e93484a0645f2802141629250803"
 
 # Page configuration
 st.set_page_config(page_title="Climate Forecast App", layout="wide")
 st.title("🌦️ Climate Forecast & Analysis Dashboard")
 
-# Tabs for different functionalities
+# Function to clean and convert time data to proper datetime format
+def clean_time_column(df):
+    # Assume all entries are for the same date, let's set it as '2025-04-26'
+    default_date = '2025-04-26'
+
+    # Convert time entries to proper datetime format by appending the default date
+    df['Date'] = pd.to_datetime(default_date + ' ' + df['Date'], errors='coerce', format='%Y-%m-%d %H:%M:%S.%f')
+
+    # Check if there are any invalid entries after conversion
+    invalid_dates = df[df['Date'].isna()]
+    if not invalid_dates.empty:
+        st.warning(f"⚠️ Some rows have invalid time formats and have been set to NaT. Here are the invalid rows:")
+        st.write(invalid_dates[['Date']])
+
+    return df
+
+# Page Tabs
 tab1, tab2, tab3, tab4 = st.tabs(["🌍 Live Weather", "📊 Climate Dataset", "📆 Predictions", "📊 Data Insights"])
 
 # --- TAB 1: LIVE WEATHER ---
@@ -47,17 +62,18 @@ with tab2:
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
 
-        # Attempt to parse 'Date' column
+        # Attempt to clean and convert the 'Date' column
         try:
-            df['Date'] = pd.to_datetime(df['Date'], errors='raise')
-            st.success("✅ Dataset successfully loaded!")
+            df = clean_time_column(df)
+            st.success("✅ Dataset successfully loaded and 'Date' column cleaned!")
+
+            # Show a preview of the cleaned data
+            st.write("### Dataset Preview:")
+            st.write(df.head())
+
         except Exception as e:
             st.error(f"❌ Error parsing 'Date' column: {e}")
             st.stop()
-
-        # Show a sample of the dataset
-        st.write("### Dataset Preview:")
-        st.write(df.head())
 
 # --- TAB 3: PREDICTIONS ---
 with tab3:
@@ -67,7 +83,7 @@ with tab3:
         df = pd.read_csv(uploaded_file)
 
         try:
-            df['Date'] = pd.to_datetime(df['Date'], errors='raise')
+            df['Date'] = pd.to_datetime(df['Date'], errors='coerce', dayfirst=False)
         except Exception as e:
             st.error(f"❌ Could not parse 'Date' column: {e}")
             st.stop()
@@ -116,7 +132,7 @@ with tab4:
         df = pd.read_csv(uploaded_file)
 
         try:
-            df['Date'] = pd.to_datetime(df['Date'], errors='raise')
+            df['Date'] = pd.to_datetime(df['Date'], errors='coerce', dayfirst=False)
         except Exception as e:
             st.error(f"❌ Error parsing 'Date' column: {e}")
             st.stop()
