@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
-import datetime
 import requests
 import matplotlib.pyplot as plt
 import seaborn as sns
+import numpy as np
 
 # Set up API key
 WEATHER_API_KEY = "e12e93484a0645f2802141629250803"
@@ -12,8 +12,8 @@ WEATHER_API_KEY = "e12e93484a0645f2802141629250803"
 st.set_page_config(page_title="Climate Forecast App", layout="wide")
 st.title("🌦️ Climate Forecast & Analysis Dashboard")
 
-# Tabs
-tab1, tab2, tab3 = st.tabs(["🌍 Live Weather", "📊 Climate Analysis", "📆 Key Date Predictions"])
+# Tabs for different functionalities
+tab1, tab2, tab3, tab4 = st.tabs(["🌍 Live Weather", "📊 Climate Dataset", "📆 Predictions", "📊 Data Insights"])
 
 # --- TAB 1: LIVE WEATHER ---
 with tab1:
@@ -38,7 +38,7 @@ with tab1:
         else:
             st.error("Failed to retrieve weather data. Please check the city name or API key.")
 
-# --- TAB 2: CLIMATE ANALYSIS ---
+# --- TAB 2: CLIMATE DATASET ---
 with tab2:
     st.header("Upload Climate Dataset")
 
@@ -47,44 +47,39 @@ with tab2:
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
 
+        # Attempt to parse 'Date' column
         try:
-            df['Date'] = pd.to_datetime(df['Date'])
+            df['Date'] = pd.to_datetime(df['Date'], errors='raise')
+            st.success("✅ Dataset successfully loaded!")
         except Exception as e:
-            st.error("❌ Error parsing 'Date' column. Please check your dataset format.")
+            st.error(f"❌ Error parsing 'Date' column: {e}")
             st.stop()
 
-        st.success("✅ Dataset successfully loaded!")
+        # Show a sample of the dataset
+        st.write("### Dataset Preview:")
         st.write(df.head())
 
-        # Show statistics
-        st.subheader("📈 Climate Trends")
-        columns = ['Temperature', 'CO2 Emissions', 'Sea Level Rise', 'Precipitation', 'Humidity', 'Wind Speed']
-        selected_col = st.selectbox("Select variable to visualize", columns)
-
-        fig, ax = plt.subplots()
-        sns.lineplot(data=df, x='Date', y=selected_col, ax=ax)
-        ax.set_title(f"{selected_col} Over Time")
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
-
-# --- TAB 3: KEY DATE PREDICTIONS ---
+# --- TAB 3: PREDICTIONS ---
 with tab3:
     st.header("📆 Key Date Predictions")
 
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
+
         try:
-            df['Date'] = pd.to_datetime(df['Date'])
-        except:
-            st.error("❌ Could not parse 'Date' column.")
+            df['Date'] = pd.to_datetime(df['Date'], errors='raise')
+        except Exception as e:
+            st.error(f"❌ Could not parse 'Date' column: {e}")
             st.stop()
 
         latest_date = df['Date'].max()
         tomorrow = latest_date + pd.Timedelta(days=1)
         next_month = latest_date + pd.DateOffset(months=1)
 
+        st.write(f"### Latest Data: {latest_date.strftime('%d %b %Y')}")
+
         if 'Temperature' in df.columns:
-            # Calculate average daily change
+            # Calculate average daily change for Temperature
             df_sorted = df.sort_values('Date')
             df_sorted['Temp_Change'] = df_sorted['Temperature'].diff()
             temp_change = df_sorted['Temp_Change'].mean()
@@ -95,7 +90,57 @@ with tab3:
 
             st.markdown(f"📍 **Tomorrow ({tomorrow.strftime('%d %b %Y')}):** `{pred_tomorrow:.2f} °C`")
             st.markdown(f"📍 **Next Month ({next_month.strftime('%d %b %Y')}):** `{pred_next_month:.2f} °C`")
+
+        if 'CO2 Emissions' in df.columns:
+            # Predict CO2 Emissions using similar logic
+            df_sorted['CO2_Change'] = df_sorted['CO2 Emissions'].diff()
+            co2_change = df_sorted['CO2_Change'].mean()
+
+            last_co2 = df_sorted['CO2 Emissions'].iloc[-1]
+            pred_tomorrow_co2 = last_co2 + co2_change
+            pred_next_month_co2 = last_co2 + (co2_change * 30)
+
+            st.markdown(f"📍 **Tomorrow CO2 Emissions:** `{pred_tomorrow_co2:.2f} ppm`")
+            st.markdown(f"📍 **Next Month CO2 Emissions:** `{pred_next_month_co2:.2f} ppm`")
+
         else:
-            st.warning("⚠️ 'Temperature' column not found in dataset.")
+            st.warning("⚠️ 'Temperature' or 'CO2 Emissions' column not found in dataset.")
     else:
-        st.warning("📂 Please upload the dataset in the 'Climate Analysis' tab to enable predictions.")
+        st.warning("📂 Please upload the dataset in the 'Climate Dataset' tab to enable predictions.")
+
+# --- TAB 4: DATA INSIGHTS ---
+with tab4:
+    st.header("📊 Data Insights")
+
+    if uploaded_file:
+        df = pd.read_csv(uploaded_file)
+
+        try:
+            df['Date'] = pd.to_datetime(df['Date'], errors='raise')
+        except Exception as e:
+            st.error(f"❌ Error parsing 'Date' column: {e}")
+            st.stop()
+
+        # Show basic statistics for numeric columns
+        st.write("### Basic Statistical Summary:")
+        st.write(df.describe())
+
+        # Correlation heatmap of numeric features
+        st.write("### Correlation Heatmap:")
+        corr = df.corr()
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", ax=ax)
+        st.pyplot(fig)
+
+        # Optionally show distributions of specific variables
+        st.subheader("Visualize Variable Distributions")
+        columns = ['Temperature', 'CO2 Emissions', 'Sea Level Rise', 'Precipitation', 'Humidity', 'Wind Speed']
+        selected_col = st.selectbox("Select variable to visualize", columns)
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.histplot(df[selected_col], kde=True, ax=ax)
+        ax.set_title(f"Distribution of {selected_col}")
+        st.pyplot(fig)
+
+    else:
+        st.warning("📂 Please upload the dataset in the 'Climate Dataset' tab to enable insights.")
