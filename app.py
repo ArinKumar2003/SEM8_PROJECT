@@ -1,133 +1,101 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-from prophet import Prophet
-from prophet.plot import plot_plotly
+import datetime
 import requests
-from statsmodels.tsa.seasonal import seasonal_decompose
-from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# Load fixed dataset
-DATA_PATH = "C:/Users/arink/Documents/climate.csv"
-df = pd.read_csv(DATA_PATH)
+# Set up API key
+WEATHER_API_KEY = "e12e93484a0645f2802141629250803"
 
-# Clean & prepare date
-df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-df.dropna(subset=['Date'], inplace=True)
-df.sort_values('Date', inplace=True)
+# Page configuration
+st.set_page_config(page_title="Climate Forecast App", layout="wide")
+st.title("🌦️ Climate Forecast & Analysis Dashboard")
 
-# Set page config
-st.set_page_config(page_title="🌦️ Climate Dashboard", layout="wide")
-st.title("🌎 Advanced Climate Forecasting Dashboard")
+# Tabs
+tab1, tab2, tab3 = st.tabs(["🌍 Live Weather", "📊 Climate Analysis", "📆 Key Date Predictions"])
 
-# Tabs setup
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "☀️ Live Weather", "📊 Forecasting", "📈 Historical Trends",
-    "📉 Seasonal Analysis", "⚠️ Anomaly Detection", "🌍 Geo Visualization"
-])
-
-# ================= LIVE WEATHER TAB =================
+# --- TAB 1: LIVE WEATHER ---
 with tab1:
-    st.header("☀️ Live Weather")
-    city = st.text_input("Enter city name", "Mohali")
-    API_KEY = "e12e93484a0645f2802141629250803"
-    url = f"http://api.weatherapi.com/v1/current.json?key={API_KEY}&q={city}"
+    st.header("Live Weather")
 
-    try:
-        res = requests.get(url)
-        data = res.json()
-        if "current" in data:
-            st.metric("Temperature (°C)", data["current"]["temp_c"])
-            st.metric("Humidity (%)", data["current"]["humidity"])
-            st.metric("Condition", data["current"]["condition"]["text"])
-            st.image(f"https:{data['current']['condition']['icon']}", width=64)
+    city = st.text_input("Enter City", "New York")
+
+    if st.button("Get Live Weather"):
+        url = f"http://api.weatherapi.com/v1/current.json?key={WEATHER_API_KEY}&q={city}"
+        response = requests.get(url)
+
+        if response.status_code == 200:
+            data = response.json()
+            location = data['location']
+            current = data['current']
+
+            st.subheader(f"Current Weather in {location['name']}, {location['country']}")
+            st.metric("🌡️ Temperature (°C)", current['temp_c'])
+            st.metric("💧 Humidity (%)", current['humidity'])
+            st.metric("🌬️ Wind Speed (kph)", current['wind_kph'])
+            st.metric("🌤️ Condition", current['condition']['text'])
         else:
-            st.warning("City not found or API error.")
-    except Exception:
-        st.error("Failed to retrieve live weather data.")
+            st.error("Failed to retrieve weather data. Please check the city name or API key.")
 
-# ================= FORECASTING TAB =================
+# --- TAB 2: CLIMATE ANALYSIS ---
 with tab2:
-    st.header("📊 Forecast Future Climate Data")
+    st.header("Upload Climate Dataset")
 
-    metric = st.selectbox("Select metric to forecast", ['Temperature', 'CO2 Emissions', 'Sea Level Rise', 'Humidity'])
+    uploaded_file = st.file_uploader("Upload your climate dataset (CSV)", type=["csv"])
 
-    # Prepare data for Prophet
-    forecast_df = df[['Date', metric]].rename(columns={"Date": "ds", metric: "y"})
-    model = Prophet()
-    model.fit(forecast_df)
+    if uploaded_file:
+        df = pd.read_csv(uploaded_file)
 
-    future = model.make_future_dataframe(periods=60)  # forecast 60 days ahead
-    forecast = model.predict(future)
+        try:
+            df['Date'] = pd.to_datetime(df['Date'])
+        except Exception as e:
+            st.error("❌ Error parsing 'Date' column. Please check your dataset format.")
+            st.stop()
 
-    st.subheader("Forecast Plot")
-    fig1 = plot_plotly(model, forecast)
-    st.plotly_chart(fig1, use_container_width=True)
+        st.success("✅ Dataset successfully loaded!")
+        st.write(df.head())
 
-    # Key date forecasts
-    st.subheader("📆 Key Date Predictions")
-    target_dates = {
-        "Tomorrow": datetime(2025, 4, 27),
-        "Next Month": datetime(2025, 5, 26)
-    }
+        # Show statistics
+        st.subheader("📈 Climate Trends")
+        columns = ['Temperature', 'CO2 Emissions', 'Sea Level Rise', 'Precipitation', 'Humidity', 'Wind Speed']
+        selected_col = st.selectbox("Select variable to visualize", columns)
 
-    for label, date in target_dates.items():
-        row = forecast[forecast['ds'] == date]
-        if not row.empty:
-            temp = row['yhat'].values[0]
-            st.markdown(f"📍 **{label} ({date.strftime('%d %b %Y')}):** {temp:.2f} {metric}")
-        else:
-            st.markdown(f"📍 **{label} ({date.strftime('%d %b %Y')}):** No data")
+        fig, ax = plt.subplots()
+        sns.lineplot(data=df, x='Date', y=selected_col, ax=ax)
+        ax.set_title(f"{selected_col} Over Time")
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
 
-# ================= HISTORICAL TRENDS TAB =================
+# --- TAB 3: KEY DATE PREDICTIONS ---
 with tab3:
-    st.header("📈 Historical Trends")
-    metric = st.selectbox("Select metric", ['Temperature', 'CO2 Emissions', 'Sea Level Rise', 'Humidity'], key='trend')
-    fig2 = px.line(df, x='Date', y=metric, title=f"Historical {metric} Trend")
-    st.plotly_chart(fig2, use_container_width=True)
+    st.header("📆 Key Date Predictions")
 
-# ================= SEASONAL DECOMPOSITION TAB =================
-with tab4:
-    st.header("📉 Seasonal Decomposition")
-    metric = st.selectbox("Select metric", ['Temperature', 'CO2 Emissions', 'Sea Level Rise', 'Humidity'], key='decomp')
-    try:
-        result = seasonal_decompose(df[metric].dropna(), period=12, model='additive', extrapolate_trend='freq')
-        st.subheader("Trend")
-        st.line_chart(result.trend)
-        st.subheader("Seasonality")
-        st.line_chart(result.seasonal)
-        st.subheader("Residuals")
-        st.line_chart(result.resid)
-    except Exception as e:
-        st.error("Not enough data points or failed to decompose.")
+    if uploaded_file:
+        df = pd.read_csv(uploaded_file)
+        try:
+            df['Date'] = pd.to_datetime(df['Date'])
+        except:
+            st.error("❌ Could not parse 'Date' column.")
+            st.stop()
 
-# ================= ANOMALY DETECTION TAB =================
-with tab5:
-    st.header("⚠️ Anomaly Detection")
-    metric = st.selectbox("Select metric to analyze", ['Temperature', 'CO2 Emissions', 'Sea Level Rise', 'Humidity'], key='anomaly')
-    q1 = df[metric].quantile(0.25)
-    q3 = df[metric].quantile(0.75)
-    iqr = q3 - q1
-    lower = q1 - 1.5 * iqr
-    upper = q3 + 1.5 * iqr
-    anomalies = df[(df[metric] < lower) | (df[metric] > upper)]
+        latest_date = df['Date'].max()
+        tomorrow = latest_date + pd.Timedelta(days=1)
+        next_month = latest_date + pd.DateOffset(months=1)
 
-    st.warning(f"Detected {len(anomalies)} anomalies.")
-    st.dataframe(anomalies[['Date', metric]])
-    fig3 = px.scatter(df, x='Date', y=metric, title="Anomalies Highlighted")
-    fig3.add_scatter(x=anomalies['Date'], y=anomalies[metric], mode='markers', marker=dict(color='red', size=8), name="Anomaly")
-    st.plotly_chart(fig3, use_container_width=True)
+        if 'Temperature' in df.columns:
+            # Calculate average daily change
+            df_sorted = df.sort_values('Date')
+            df_sorted['Temp_Change'] = df_sorted['Temperature'].diff()
+            temp_change = df_sorted['Temp_Change'].mean()
 
-# ================= GEO VISUALIZATION TAB =================
-with tab6:
-    st.header("🌍 Climate Geo Visualization")
-    if 'Latitude' in df.columns and 'Longitude' in df.columns:
-        metric = st.selectbox("Select metric to map", ['Temperature', 'CO2 Emissions', 'Sea Level Rise', 'Humidity'], key='geo')
-        fig4 = px.scatter_geo(df,
-                              lat='Latitude', lon='Longitude',
-                              color=metric, size=metric,
-                              projection="natural earth",
-                              title=f"{metric} Distribution on Globe")
-        st.plotly_chart(fig4, use_container_width=True)
+            last_temp = df_sorted['Temperature'].iloc[-1]
+            pred_tomorrow = last_temp + temp_change
+            pred_next_month = last_temp + (temp_change * 30)
+
+            st.markdown(f"📍 **Tomorrow ({tomorrow.strftime('%d %b %Y')}):** `{pred_tomorrow:.2f} °C`")
+            st.markdown(f"📍 **Next Month ({next_month.strftime('%d %b %Y')}):** `{pred_next_month:.2f} °C`")
+        else:
+            st.warning("⚠️ 'Temperature' column not found in dataset.")
     else:
-        st.info("Latitude and Longitude columns not found in the dataset.")
+        st.warning("📂 Please upload the dataset in the 'Climate Analysis' tab to enable predictions.")
