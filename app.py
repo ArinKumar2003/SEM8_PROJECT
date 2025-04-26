@@ -8,7 +8,7 @@ from statsmodels.tsa.seasonal import seasonal_decompose
 from datetime import datetime, timedelta
 
 # Load fixed dataset
-DATA_PATH = "C:\Users\arink\Documents\climate.csv"
+DATA_PATH = "C:/Users/arink/Documents/climate.csv"
 df = pd.read_csv(DATA_PATH)
 
 # Clean & prepare date
