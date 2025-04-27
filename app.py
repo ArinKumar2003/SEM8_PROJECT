@@ -2,31 +2,65 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import timedelta
+import requests
 
+# Page config
 st.set_page_config(page_title="🌦️ Climate Forecast & Analysis", layout="wide")
-
 st.title("🌦️ Climate Forecast & Analysis Dashboard")
 
+# Tabs
 tab1, tab2, tab3, tab4 = st.tabs(["🌍 Live Weather", "📊 Climate Dataset", "📆 Predictions", "📊 Data Insights"])
 
-# Shared df
+# Shared dataframe
 df = None
 
-# TAB 1: Live Weather (placeholder)
+# Weather API Function
+def fetch_live_weather(city_name):
+    api_key = "e12e93484a0645f2802141629250803"
+    base_url = "http://api.weatherapi.com/v1"
+    endpoint = f"{base_url}/current.json"
+    params = {
+        "key": api_key,
+        "q": city_name
+    }
+
+    try:
+        response = requests.get(endpoint, params=params)
+        response.raise_for_status()
+        data = response.json()
+        return {
+            "location": data["location"]["name"],
+            "region": data["location"]["region"],
+            "country": data["location"]["country"],
+            "temperature": data["current"]["temp_c"],
+            "condition": data["current"]["condition"]["text"]
+        }
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching data: {e}")
+        return None
+
+# TAB 1: Live Weather
 with tab1:
     st.subheader("🌍 Live Weather")
-    st.write("Coming soon...")
+    city = st.text_input("Enter city name:", "Mohali")
+    if city:
+        weather = fetch_live_weather(city)
+        if weather:
+            st.metric("📍 Location", f"{weather['location']}, {weather['region']}")
+            st.metric("🌡️ Temperature", f"{weather['temperature']} °C")
+            st.write(f"**Condition:** {weather['condition']}")
+        else:
+            st.error("❌ Unable to fetch live weather. Check the city name or try again later.")
 
 # TAB 2: Upload and Clean Dataset
 with tab2:
     st.header("📊 Upload Climate Dataset")
-
     uploaded_file = st.file_uploader("Upload your climate dataset (CSV)", type=["csv"])
+
     if uploaded_file:
         try:
             df = pd.read_csv(uploaded_file)
 
-            # Try to parse 'Date.Full'
             st.subheader("📅 Cleaning 'Date.Full' column...")
             invalid_dates = []
             parsed_dates = []
@@ -77,16 +111,16 @@ with tab3:
                 pred_tomorrow = today_temp + avg_daily_change
                 pred_next_week = today_temp + (avg_daily_change * 7)
 
-                st.metric("📌 Today's Temp", f"{today_temp:.2f} °C")
-                st.markdown(f"📍 **Tomorrow**: `{pred_tomorrow:.2f} °C`")
-                st.markdown(f"📍 **Next Week**: `{pred_next_week:.2f} °C`")
+                st.metric("📌 Last Recorded Temp", f"{today_temp:.2f} °C")
+                st.markdown(f"📍 **Tomorrow (2025)**: `{pred_tomorrow:.2f} °C`")
+                st.markdown(f"📍 **Next Week (2025)**: `{pred_next_week:.2f} °C`")
 
-                # Forecast Table
                 forecast_df = pd.DataFrame({
-                    "Date": [df["Date"].iloc[-1] + timedelta(days=i) for i in range(1, 8)],
-                    "Predicted Avg Temp (°C)": [today_temp + (avg_daily_change * i) for i in range(1, 8)]
+                    "Date": [pd.to_datetime("2025-04-28") + timedelta(days=i) for i in range(7)],
+                    "Predicted Avg Temp (°C)": [today_temp + (avg_daily_change * (i + 1)) for i in range(7)]
                 })
-                st.markdown("### 🔮 7-Day Forecast")
+
+                st.markdown("### 🔮 7-Day Forecast (from April 28, 2025)")
                 st.dataframe(forecast_df)
     else:
         st.warning("📂 Please upload the dataset first in the previous tab.")
