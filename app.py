@@ -28,7 +28,14 @@ st.set_page_config(page_title="🌦️ Hybrid Weather Forecast", layout="wide")
 st.title("🌦️ Hybrid Weather Forecast & Analysis Dashboard")
 
 # Tabs for various sections
-tab1, tab2, tab3, tab4 = st.tabs(["🌍 Live Weather", "📊 Climate Dataset", "📆 Predictions", "📊 Data Insights"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "🌍 Live Weather", 
+    "📊 Climate Dataset", 
+    "📆 Predictions", 
+    "📊 Data Insights", 
+    "📖 App Overview", 
+    "❓ Help/FAQ"
+])
 
 # Shared df
 df = None
@@ -171,3 +178,38 @@ with tab4:
             st.pyplot(fig)
     else:
         st.warning("📂 Please upload the dataset to view insights.")
+
+# TAB 5: App Overview
+with tab5:
+    st.subheader("📖 App Overview")
+    st.write("""
+    This app provides a hybrid weather forecast by combining live weather data from WeatherAPI with temperature predictions generated using historical climate data uploaded by the user. 
+    It allows users to:
+    - View the current weather forecast for any city.
+    - Upload their climate dataset for analysis.
+    - Generate temperature predictions for the next 7 days.
+    - Visualize climate trends over time.
+    """)
+
+# TAB 6: Help/FAQ
+with tab6:
+    st.subheader("❓ Help/FAQ")
+    st.write("""
+    **Q: How do I upload a dataset?**
+    - Click on the "📊 Climate Dataset" tab and upload a CSV file with temperature data.
+
+    **Q: What type of data should my dataset contain?**
+    - Your dataset should include columns like 'Date.Full' and 'Data.Temperature.Avg Temp'. Ensure that the 'Date.Full' column is in a valid date format.
+
+    **Q: How accurate are the temperature predictions?**
+    - The temperature predictions are based on historical data and a simple linear regression model. For better accuracy, ensure that your dataset is large and well-structured.
+
+    **Q: How can I change the city for the weather forecast?**
+    - Enter the desired city in the input box under the "🌍 Live Weather" tab.
+
+    **Q: Why is there a discrepancy between the live forecast and predictions?**
+    - The live forecast is provided by WeatherAPI based on up-to-date meteorological models, while predictions are based on historical data trends.
+
+    **Q: What if my dataset contains invalid dates?**
+    - The app will automatically handle invalid dates by setting them to NaT (Not a Time) and showing a warning message.
+    """)
