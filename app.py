@@ -27,7 +27,7 @@ def clean_time_column(df):
 
     return df
 
-# Page Tabs
+# Tabs
 tab1, tab2, tab3, tab4 = st.tabs(["🌍 Live Weather", "📊 Climate Dataset", "📆 Predictions", "📊 Data Insights"])
 
 # --- TAB 1: LIVE WEATHER ---
@@ -60,67 +60,74 @@ with tab2:
     uploaded_file = st.file_uploader("Upload your climate dataset (CSV)", type=["csv"])
 
     if uploaded_file:
-        df = pd.read_csv(uploaded_file)
-
-        # Attempt to clean and convert the 'Date' column
         try:
-            df = clean_time_column(df)
-            st.success("✅ Dataset successfully loaded and 'Date' column cleaned!")
+            # Attempt to read the CSV file into a DataFrame
+            df = pd.read_csv(uploaded_file)
+            
+            # Check if the file is empty
+            if df.empty:
+                st.error("❌ The file is empty. Please upload a valid dataset.")
+            else:
+                # Clean the 'Date' column if necessary
+                df = clean_time_column(df)
 
-            # Show a preview of the cleaned data
-            st.write("### Dataset Preview:")
-            st.write(df.head())
-
+                # Successfully loaded and cleaned the data
+                st.success("✅ Dataset successfully loaded and 'Date' column cleaned!")
+                
+                # Display the first few rows of the dataset
+                st.write("### Dataset Preview:")
+                st.write(df.head())
+        
+        except pd.errors.EmptyDataError:
+            st.error("❌ The file is empty or unreadable. Please upload a valid CSV file.")
         except Exception as e:
-            st.error(f"❌ Error parsing 'Date' column: {e}")
-            st.stop()
+            st.error(f"❌ An error occurred: {e}")
 
 # --- TAB 3: PREDICTIONS ---
 with tab3:
     st.header("📆 Key Date Predictions")
 
     if uploaded_file:
-        df = pd.read_csv(uploaded_file)
-
         try:
+            # Reload the uploaded file and clean the 'Date' column
+            df = pd.read_csv(uploaded_file)
             df['Date'] = pd.to_datetime(df['Date'], errors='coerce', dayfirst=False)
+
+            latest_date = df['Date'].max()
+            tomorrow = latest_date + pd.Timedelta(days=1)
+            next_month = latest_date + pd.DateOffset(months=1)
+
+            st.write(f"### Latest Data: {latest_date.strftime('%d %b %Y')}")
+
+            if 'Temperature' in df.columns:
+                # Calculate average daily change for Temperature
+                df_sorted = df.sort_values('Date')
+                df_sorted['Temp_Change'] = df_sorted['Temperature'].diff()
+                temp_change = df_sorted['Temp_Change'].mean()
+
+                last_temp = df_sorted['Temperature'].iloc[-1]
+                pred_tomorrow = last_temp + temp_change
+                pred_next_month = last_temp + (temp_change * 30)
+
+                st.markdown(f"📍 **Tomorrow ({tomorrow.strftime('%d %b %Y')}):** `{pred_tomorrow:.2f} °C`")
+                st.markdown(f"📍 **Next Month ({next_month.strftime('%d %b %Y')}):** `{pred_next_month:.2f} °C`")
+
+            if 'CO2 Emissions' in df.columns:
+                # Predict CO2 Emissions using similar logic
+                df_sorted['CO2_Change'] = df_sorted['CO2 Emissions'].diff()
+                co2_change = df_sorted['CO2_Change'].mean()
+
+                last_co2 = df_sorted['CO2 Emissions'].iloc[-1]
+                pred_tomorrow_co2 = last_co2 + co2_change
+                pred_next_month_co2 = last_co2 + (co2_change * 30)
+
+                st.markdown(f"📍 **Tomorrow CO2 Emissions:** `{pred_tomorrow_co2:.2f} ppm`")
+                st.markdown(f"📍 **Next Month CO2 Emissions:** `{pred_next_month_co2:.2f} ppm`")
+
+            else:
+                st.warning("⚠️ 'Temperature' or 'CO2 Emissions' column not found in dataset.")
         except Exception as e:
             st.error(f"❌ Could not parse 'Date' column: {e}")
-            st.stop()
-
-        latest_date = df['Date'].max()
-        tomorrow = latest_date + pd.Timedelta(days=1)
-        next_month = latest_date + pd.DateOffset(months=1)
-
-        st.write(f"### Latest Data: {latest_date.strftime('%d %b %Y')}")
-
-        if 'Temperature' in df.columns:
-            # Calculate average daily change for Temperature
-            df_sorted = df.sort_values('Date')
-            df_sorted['Temp_Change'] = df_sorted['Temperature'].diff()
-            temp_change = df_sorted['Temp_Change'].mean()
-
-            last_temp = df_sorted['Temperature'].iloc[-1]
-            pred_tomorrow = last_temp + temp_change
-            pred_next_month = last_temp + (temp_change * 30)
-
-            st.markdown(f"📍 **Tomorrow ({tomorrow.strftime('%d %b %Y')}):** `{pred_tomorrow:.2f} °C`")
-            st.markdown(f"📍 **Next Month ({next_month.strftime('%d %b %Y')}):** `{pred_next_month:.2f} °C`")
-
-        if 'CO2 Emissions' in df.columns:
-            # Predict CO2 Emissions using similar logic
-            df_sorted['CO2_Change'] = df_sorted['CO2 Emissions'].diff()
-            co2_change = df_sorted['CO2_Change'].mean()
-
-            last_co2 = df_sorted['CO2 Emissions'].iloc[-1]
-            pred_tomorrow_co2 = last_co2 + co2_change
-            pred_next_month_co2 = last_co2 + (co2_change * 30)
-
-            st.markdown(f"📍 **Tomorrow CO2 Emissions:** `{pred_tomorrow_co2:.2f} ppm`")
-            st.markdown(f"📍 **Next Month CO2 Emissions:** `{pred_next_month_co2:.2f} ppm`")
-
-        else:
-            st.warning("⚠️ 'Temperature' or 'CO2 Emissions' column not found in dataset.")
     else:
         st.warning("📂 Please upload the dataset in the 'Climate Dataset' tab to enable predictions.")
 
@@ -129,34 +136,32 @@ with tab4:
     st.header("📊 Data Insights")
 
     if uploaded_file:
-        df = pd.read_csv(uploaded_file)
-
         try:
+            df = pd.read_csv(uploaded_file)
             df['Date'] = pd.to_datetime(df['Date'], errors='coerce', dayfirst=False)
+
+            # Show basic statistics for numeric columns
+            st.write("### Basic Statistical Summary:")
+            st.write(df.describe())
+
+            # Correlation heatmap of numeric features
+            st.write("### Correlation Heatmap:")
+            corr = df.corr()
+            fig, ax = plt.subplots(figsize=(10, 6))
+            sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", ax=ax)
+            st.pyplot(fig)
+
+            # Optionally show distributions of specific variables
+            st.subheader("Visualize Variable Distributions")
+            columns = ['Temperature', 'CO2 Emissions', 'Sea Level Rise', 'Precipitation', 'Humidity', 'Wind Speed']
+            selected_col = st.selectbox("Select variable to visualize", columns)
+
+            fig, ax = plt.subplots(figsize=(10, 6))
+            sns.histplot(df[selected_col], kde=True, ax=ax)
+            ax.set_title(f"Distribution of {selected_col}")
+            st.pyplot(fig)
+
         except Exception as e:
             st.error(f"❌ Error parsing 'Date' column: {e}")
-            st.stop()
-
-        # Show basic statistics for numeric columns
-        st.write("### Basic Statistical Summary:")
-        st.write(df.describe())
-
-        # Correlation heatmap of numeric features
-        st.write("### Correlation Heatmap:")
-        corr = df.corr()
-        fig, ax = plt.subplots(figsize=(10, 6))
-        sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", ax=ax)
-        st.pyplot(fig)
-
-        # Optionally show distributions of specific variables
-        st.subheader("Visualize Variable Distributions")
-        columns = ['Temperature', 'CO2 Emissions', 'Sea Level Rise', 'Precipitation', 'Humidity', 'Wind Speed']
-        selected_col = st.selectbox("Select variable to visualize", columns)
-
-        fig, ax = plt.subplots(figsize=(10, 6))
-        sns.histplot(df[selected_col], kde=True, ax=ax)
-        ax.set_title(f"Distribution of {selected_col}")
-        st.pyplot(fig)
-
     else:
         st.warning("📂 Please upload the dataset in the 'Climate Dataset' tab to enable insights.")
