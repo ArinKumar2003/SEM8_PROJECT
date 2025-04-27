@@ -3,12 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import requests
 from datetime import timedelta
-
-st.set_page_config(page_title="🌦️ Climate Forecast & Analysis", layout="wide")
-
-st.title("🌦️ Climate Forecast & Analysis Dashboard")
-
-tab1, tab2, tab3, tab4 = st.tabs(["🌍 Live Weather", "📊 Climate Dataset", "📆 Predictions", "📊 Data Insights"])
+from sklearn.linear_model import LinearRegression
+import numpy as np
 
 # Function to fetch WeatherAPI forecast
 def fetch_forecast(city, days=7):
@@ -26,6 +22,13 @@ def fetch_forecast(city, days=7):
         return response.json()
     else:
         return None
+
+# Streamlit app setup
+st.set_page_config(page_title="🌦️ Hybrid Weather Forecast", layout="wide")
+st.title("🌦️ Hybrid Weather Forecast & Analysis Dashboard")
+
+# Tabs for various sections
+tab1, tab2, tab3, tab4 = st.tabs(["🌍 Live Weather", "📊 Climate Dataset", "📆 Predictions", "📊 Data Insights"])
 
 # Shared df
 df = None
@@ -81,7 +84,7 @@ with tab2:
         except Exception as e:
             st.error(f"❌ Error loading dataset: {e}")
 
-# TAB 3: Predictions
+# TAB 3: Predictions (Hybrid Model)
 with tab3:
     st.header("📆 Predict Temperature from Today")
 
@@ -94,49 +97,62 @@ with tab3:
             df = df.dropna(subset=['Date', 'Data.Temperature.Avg Temp'])
             df = df.sort_values("Date")
 
-            df['Temp_Change'] = df['Data.Temperature.Avg Temp'].diff()
-            avg_daily_change = df['Temp_Change'].mean()
+            # Linear Regression Model for Temperature Prediction
+            df['DayOfYear'] = df['Date'].dt.dayofyear  # Use day of year as a feature
+            X = df['DayOfYear'].values.reshape(-1, 1)  # Feature: Day of Year
+            y = df['Data.Temperature.Avg Temp'].values  # Target: Temperature
 
-            last_temp = df['Data.Temperature.Avg Temp'].iloc[-1]
+            # Train a linear regression model
+            model = LinearRegression()
+            model.fit(X, y)
+
+            # Predict future temperatures (e.g., next 7 days)
             last_date = df['Date'].iloc[-1]
+            predicted_temps = model.predict(np.array([last_date.dayofyear + i for i in range(1, 8)]).reshape(-1, 1))
 
-            hist_forecast = pd.DataFrame({
-                "Date": [last_date + timedelta(days=i) for i in range(1, 8)],
-                "Historical Predicted Temp (°C)": [last_temp + avg_daily_change * i for i in range(1, 8)]
+            # Create DataFrame with predictions
+            forecast_dates = [last_date + timedelta(days=i) for i in range(1, 8)]
+            forecast_df = pd.DataFrame({
+                'Date': forecast_dates,
+                'Predicted Temp (°C)': predicted_temps
             })
 
+            st.markdown("### 🔮 7-Day Hybrid Temperature Forecast")
+            st.dataframe(forecast_df)
+
+            # Fetch live forecast data
             city = st.text_input("City for live forecast", "Mohali")
             forecast_data = fetch_forecast(city)
 
             if forecast_data:
                 forecast_days = forecast_data['forecast']['forecastday']
-                forecast_df = pd.DataFrame([
+                forecast_live_df = pd.DataFrame([
                     {
                         "Date": pd.to_datetime(day['date']),
                         "Forecast Avg Temp (°C)": day['day']['avgtemp_c']
                     } for day in forecast_days
                 ])
 
-                combined = pd.merge(hist_forecast, forecast_df, on="Date", how="outer").sort_values("Date")
-                st.markdown("### 🔮 Combined 7-Day Forecast")
+                combined = pd.merge(forecast_live_df, forecast_df, on="Date", how="outer").sort_values("Date")
+                st.markdown("### 🔮 Combined 7-Day Forecast (Live + Prediction)")
                 st.dataframe(combined)
 
+                # Plotting
                 fig, ax = plt.subplots()
-                if 'Forecast Avg Temp (°C)' in combined:
-                    ax.plot(combined['Date'], combined['Forecast Avg Temp (°C)'], label='Live Forecast', marker='o')
-                if 'Historical Predicted Temp (°C)' in combined:
-                    ax.plot(combined['Date'], combined['Historical Predicted Temp (°C)'], label='Historical Prediction', marker='x')
-                ax.set_ylabel("Avg Temp (°C)")
-                ax.set_title("Hybrid Temperature Forecast")
+                ax.plot(combined['Date'], combined['Forecast Avg Temp (°C)'], label='Live Forecast', marker='o')
+                ax.plot(combined['Date'], combined['Predicted Temp (°C)'], label='Predicted Temp', marker='x')
+                ax.set_xlabel('Date')
+                ax.set_ylabel('Temperature (°C)')
+                ax.set_title(f'Hybrid Temperature Forecast for {city}')
                 ax.legend()
                 st.pyplot(fig)
             else:
                 st.warning("⚠️ Could not fetch live forecast. Showing only historical prediction.")
-                st.dataframe(hist_forecast)
+                st.dataframe(forecast_df)
     else:
         st.warning("📂 Please upload the dataset first in the previous tab.")
 
-# TAB 4: Insights
+# TAB 4: Insights (Visualizations)
 with tab4:
     st.header("📊 Data Insights")
     if df is not None:
@@ -150,7 +166,7 @@ with tab4:
         with st.expander("🌧️ Precipitation Over Time"):
             fig, ax = plt.subplots()
             df.plot(x="Date", y="Data.Precipitation", ax=ax, color="green")
-            ax.set_ylabel("Precipitation")
+            ax.set_ylabel("Precipitation (mm)")
             ax.set_title("Precipitation Over Time")
             st.pyplot(fig)
     else:
