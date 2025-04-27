@@ -63,10 +63,12 @@ with tab2:
         try:
             # Attempt to read the CSV file into a DataFrame
             df = pd.read_csv(uploaded_file)
-            
-            # Check if the file is empty
+
+            # Check if the file has columns and is not empty
             if df.empty:
                 st.error("❌ The file is empty. Please upload a valid dataset.")
+            elif df.columns.isnull().all():
+                st.error("❌ The file does not contain valid column headers. Please check your CSV format.")
             else:
                 # Clean the 'Date' column if necessary
                 df = clean_time_column(df)
@@ -77,9 +79,11 @@ with tab2:
                 # Display the first few rows of the dataset
                 st.write("### Dataset Preview:")
                 st.write(df.head())
-        
+
         except pd.errors.EmptyDataError:
             st.error("❌ The file is empty or unreadable. Please upload a valid CSV file.")
+        except pd.errors.ParserError:
+            st.error("❌ There was an error parsing the CSV file. Please check the delimiter or format.")
         except Exception as e:
             st.error(f"❌ An error occurred: {e}")
 
